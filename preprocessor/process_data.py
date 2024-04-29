@@ -1,6 +1,7 @@
 import re
-import sys
+
 import sympy as sp
+from sympy.core.symbol import Symbol
 from sympy.printing.rust import rust_code
 from sympy.parsing.sympy_parser import parse_expr
 
@@ -21,7 +22,7 @@ def good_rust_code(expression):
     return rust
 
 
-def get_param_def(expression, params_str, param_sym):
+def get_param_def(expression, params_str: list[str], param_sym: list[Symbol]):
     string = "let "
     varstr = "("
     varstr += ", ".join(
@@ -80,7 +81,9 @@ def rustify_matrix(matrix):
     return string
 
 
-def function_str(f, variable, parameters, params, f_name):
+def function_str(
+    f, variable: str, parameters: list[str], params: list[Symbol], f_name: str
+):
     string = "#[allow(non_snake_case)]\n"
     try:
         dim = len(f.shape)
@@ -110,12 +113,12 @@ def function_str(f, variable, parameters, params, f_name):
 
     return string
 
-def main():
-    datafile = "datafile.dat" if len(sys.argv) < 2 else sys.argv[1]
+
+def create_function_file(datafile = "datafile.dat"):
     datapath = f"data/{datafile}"
 
-    with open(datapath, "r", encoding="utf8") as datafile:
-        match = re.search(r".*?\((.*?);\s*?(.*?)\)\s*?=\s*?(.*)", datafile.readline())
+    with open(datapath, "r", encoding="utf8") as infile:
+        match = re.search(r".*?\((.*?);\s*?(.*?)\)\s*?=\s*?(.*)", infile.readline())
         if match is None:
             raise ValueError("Waaaa")
         variable, parameters, expression = match[1], match[2], match[3]
@@ -123,12 +126,14 @@ def main():
     parameters = parameters.replace(" ", "").split(",")
     x, *params = sp.symbols(f"{variable}, {' '.join(parameters)}")
 
-    local_dict = {s: v for s, v in zip(parameters, params)}
+    local_dict = dict(zip(parameters, params))
     local_dict[variable] = x
 
     symbolic_f = parse_expr(expression, local_dict=local_dict)
     symbolic_grad_f = sp.simplify(sp.derive_by_array(symbolic_f, params))
-    symbolic_hessian = sp.simplify(sp.derive_by_array(symbolic_grad_f, params).tomatrix())
+    symbolic_hessian = sp.simplify(
+        sp.derive_by_array(symbolic_grad_f, params).tomatrix()
+    )
 
     with open("src/function.rs", "w", encoding="utf8") as funcfile:
         funcfile.write(
@@ -144,6 +149,3 @@ use ndarray::prelude::*;
 {function_str(symbolic_hessian, variable, parameters, params, "hess_f")}
 """
         )
-
-if __name__ == "__main__":
-    main()
