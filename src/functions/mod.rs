@@ -21,7 +21,7 @@ pub trait Differentiated<const D: usize> {
 }
 
 macro_rules! create_function_enum {
-    ($($file:ident::$typename:ident<$D:literal>),*) => {
+    ($($file:ident::$typename:ident<$D:literal>),*,) => {
         $(pub mod $file);*;
 
         #[derive(Clone, PartialEq, Eq, Hash, Debug, EnumString, EnumIter, VariantNames)]
@@ -116,8 +116,8 @@ create_function_enum!(
     sine::Sine<4>,
     sqrt::Sqrt<4>,
     normal::Normal<3>,
+    decay::Decay<2>,
     mort_func::MortFunc<4>,
-    decay::Decay<2>
 );
 
 #[cfg(test)]
