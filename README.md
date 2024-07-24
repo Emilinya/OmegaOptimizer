@@ -2,7 +2,7 @@
 
 *Omega Optimizer* is a program that finds the parameters such that a parametrized function best matches some data. It uses a gui where you can see your data, choose from several parameterized function, run the optimizer and save the result as a figure.
 
-![](figures/normal_data-normal.png)
+![](media/normal_example.png)
 
 ## Adding a new function
 
@@ -61,4 +61,4 @@ impl Differentiated<2> for Decay {
 
 We then add `decay::Decay<2>` to `create_function_enum`, and now the function is available through the gui:
 
-![](figures/decay_test.png)
+![](media/decay_test.png)
