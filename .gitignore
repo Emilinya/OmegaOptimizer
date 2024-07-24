@@ -1,9 +1,7 @@
 /target
-Cargo.lock
-src/function.rs
+/.vscode
+/data
 /figures
-*.dat
+/misc
 
-/blog
-/previous
-__pycache__
+.DS_Store
