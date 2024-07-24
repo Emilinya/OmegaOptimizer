@@ -213,7 +213,8 @@ impl eframe::App for MyApp {
                 if ui.button("Save Figure").clicked() {
                     if let Some(parameters) = parameter_store.get_parameters() {
                         let data_name = self.datafile.file_stem().unwrap().to_string_lossy();
-                        let figure_name = format!("figures/{}-{}.png", data_name, self.function.name());
+                        let figure_name =
+                            format!("figures/{}-{}.png", data_name, self.function.name());
                         plot_slice(
                             &self.x_ray,
                             &self.y_ray,
