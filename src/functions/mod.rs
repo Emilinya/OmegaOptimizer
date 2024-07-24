@@ -116,7 +116,8 @@ create_function_enum!(
     sine::Sine<4>,
     sqrt::Sqrt<4>,
     normal::Normal<3>,
-    mort_func::MortFunc<4>
+    mort_func::MortFunc<4>,
+    decay::Decay<2>
 );
 
 #[cfg(test)]
