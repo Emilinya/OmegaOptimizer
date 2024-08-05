@@ -58,13 +58,24 @@ fn newton_descent<const D: usize>(
         let Some(inv_hess) = hess_f(&x).try_inverse() else {
             return (x, Some(NewtonError::Singular));
         };
-        x -= inv_hess * g;
 
-        let f_val = f(&x);
-        if f_val > prev_f {
-            return (x + inv_hess * g, Some(NewtonError::StepIncreased));
+        // ensure step decreases function value by damping step if it does not
+        let mut damping = 1.0;
+        loop {
+            let next_x = x - damping * inv_hess * g;
+
+            if f(&next_x) < prev_f {
+                x = next_x;
+                prev_f = f(&x);
+                break;
+            } else {
+                damping *= 0.5;
+            }
+
+            if damping < f64::EPSILON {
+                return (x, Some(NewtonError::StepIncreased));
+            }
         }
-        prev_f = f_val;
     }
 
     (x, Some(NewtonError::DidNotConverge))
@@ -197,7 +208,6 @@ pub fn combined_descent<const D: usize>(
                 Some(NewtonError::DidNotConverge) => {
                     return convertify(newton_descent(&newton_out, function, MAX_STEPS))
                 }
-                // Should I keep trying in this case? Or just error?
                 Some(_) => {
                     best_params = newton_out;
                     best_f = f(&newton_out);
