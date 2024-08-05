@@ -1,10 +1,11 @@
-use crate::error_functions::Function;
+use crate::error_functions::ErrorFunction;
 use log::info;
 use nalgebra::SVector;
 use std::convert::Into;
 
 type MinimizerOut<const D: usize, E> = (SVector<f64, D>, Option<E>);
 
+#[derive(Debug)]
 enum NewtonError {
     DidNotConverge,
     NotPositiveDefinite,
@@ -31,7 +32,7 @@ fn convertify<const D: usize>(out: MinimizerOut<D, NewtonError>) -> MinimizerOut
 
 fn newton_descent<const D: usize>(
     x0: &SVector<f64, D>,
-    function: &Function<D>,
+    function: &ErrorFunction<D>,
     max_steps: usize,
 ) -> MinimizerOut<D, NewtonError> {
     let threshold = 1e-12;
@@ -85,6 +86,7 @@ impl BacktrackArgs {
     }
 }
 
+#[derive(Debug)]
 enum BacktrackError {
     DidNotConverge,
     TooSmallAlpha,
@@ -92,7 +94,7 @@ enum BacktrackError {
 
 fn backtrack_descent<const D: usize>(
     x0: &SVector<f64, D>,
-    function: &Function<D>,
+    function: &ErrorFunction<D>,
     max_steps: usize,
     backtrack_args: &BacktrackArgs,
 ) -> MinimizerOut<D, BacktrackError> {
@@ -154,7 +156,7 @@ fn backtrack_descent<const D: usize>(
 
 pub fn combined_descent<const D: usize>(
     x0: &SVector<f64, D>,
-    function: &Function<D>,
+    function: &ErrorFunction<D>,
 ) -> MinimizerOut<D, String> {
     const STEP_COUNTS: [usize; 4] = [10, 100, 1000, 10_000];
 
@@ -209,4 +211,86 @@ pub fn combined_descent<const D: usize>(
     }
 
     (best_params, Some("Combined descent never converged".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        error_functions::get_error_functions,
+        functions::{line::Line, Differentiated},
+    };
+    use core::f64::consts::{E, PI};
+    use nalgebra::Vector2;
+
+    #[test]
+    fn test_newton_descent() {
+        test_minimizer(Mode::Newton);
+    }
+
+    #[test]
+    fn test_backtrack_descent() {
+        test_minimizer(Mode::Backtrack);
+    }
+
+    #[test]
+    fn test_combined_descent() {
+        test_minimizer(Mode::Combined);
+    }
+
+    fn test_minimizer(mode: Mode) {
+        let parameters = Vector2::new(E, PI);
+
+        // Create data with no noise, as we then should get 'parameters' exactly.
+        const N: usize = 100;
+        let mut x_ray = Vec::with_capacity(N);
+        let mut y_ray = Vec::with_capacity(N);
+        for i in 0..N {
+            let x = i as f64 / ((N - 1) as f64);
+            x_ray.push(x);
+            y_ray.push(Line::f(x, &parameters));
+        }
+
+        let p0 = Vector2::from_element(1.0);
+        let error_function = get_error_functions::<2, Line>(x_ray.into(), y_ray.into());
+        let (optimal_parameters, error) = match mode {
+            Mode::Backtrack => {
+                let (p, e) =
+                    backtrack_descent(&p0, &error_function, 1000, &BacktrackArgs::default());
+                (p, e.map(|e| format!("{:?}", e)))
+            }
+            Mode::Newton => {
+                let (p, e) = newton_descent(&p0, &error_function, 10);
+                (p, e.map(|e| format!("{:?}", e)))
+            }
+            Mode::Combined => combined_descent(&p0, &error_function),
+        };
+
+        if let Some(error) = error {
+            panic!("{:?} got error: {:?}", mode, error);
+        }
+
+        let threshold = match mode {
+            Mode::Backtrack => 1e-10,
+            Mode::Newton => 1e-14,
+            Mode::Combined => 0.0,
+        };
+
+        if (optimal_parameters - parameters).abs().max() > threshold {
+            panic!(
+                "{:?} got wrong parameters! {:?} > {}",
+                mode,
+                (optimal_parameters - parameters).abs(),
+                threshold,
+            );
+        }
+    }
+
+    #[derive(Debug)]
+    enum Mode {
+        Backtrack,
+        Newton,
+        Combined,
+    }
 }

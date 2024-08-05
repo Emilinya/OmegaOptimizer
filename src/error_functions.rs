@@ -2,14 +2,13 @@ use itertools::izip;
 use nalgebra::{SMatrix, SVector};
 use std::rc::Rc;
 
-use crate::functions;
-use functions::Differentiated;
+use crate::functions::{Differentiated, Functions};
 
 type EBox<const D: usize> = Box<dyn Fn(&SVector<f64, D>) -> f64>;
 type EGradBox<const D: usize> = Box<dyn Fn(&SVector<f64, D>) -> SVector<f64, D>>;
 type EHessBox<const D: usize> = Box<dyn Fn(&SVector<f64, D>) -> SMatrix<f64, D, D>>;
 
-pub struct Function<const D: usize> {
+pub struct ErrorFunction<const D: usize> {
     pub f: EBox<D>,
     pub grad: EGradBox<D>,
     pub hess: EHessBox<D>,
@@ -24,7 +23,7 @@ pub fn outer<const D: usize>(vector: &SVector<f64, D>) -> SMatrix<f64, D, D> {
 pub fn get_error_functions<const D: usize, F: Differentiated<D>>(
     x_ray: Rc<Vec<f64>>,
     y_ray: Rc<Vec<f64>>,
-) -> Function<D> {
+) -> ErrorFunction<D> {
     let ray_len = x_ray.len() as f64;
 
     let (error_x_ray, error_y_ray) = (x_ray.clone(), y_ray.clone());
@@ -53,19 +52,14 @@ pub fn get_error_functions<const D: usize, F: Differentiated<D>>(
         (-2.0 / ray_len) * hess
     });
 
-    Function {
+    ErrorFunction {
         f: error,
         grad: gradient,
         hess: hessian,
     }
 }
 
-pub fn error(
-    x_ray: &[f64],
-    y_ray: &[f64],
-    function: &functions::Functions,
-    parameters: &[f64],
-) -> f64 {
+pub fn error(x_ray: &[f64], y_ray: &[f64], function: &Functions, parameters: &[f64]) -> f64 {
     let mut sum = 0.0;
     for (x, y) in izip!(x_ray.iter(), y_ray.iter()) {
         sum += (y - function.f(*x, parameters)).powi(2);
