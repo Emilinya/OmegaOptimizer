@@ -20,7 +20,7 @@ pub fn create_gui(
     function: Option<Functions>,
     initial_parameters: Option<Vec<f64>>,
 ) {
-    const SCALE: f32 = 1.5;
+    const SCALE: f32 = 1.25;
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([640.0 * SCALE, 520.0 * SCALE]),
