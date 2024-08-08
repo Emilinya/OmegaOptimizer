@@ -1,62 +1,42 @@
-use crate::error_functions::ErrorFunction;
-use log::info;
+use log::{debug, info};
 use nalgebra::SVector;
-use std::convert::Into;
 
-type MinimizerOut<const D: usize, E> = (SVector<f64, D>, Option<E>);
+use crate::error_functions::ErrorFunction;
+use crate::Differentiated;
 
-#[derive(Debug)]
-enum NewtonError {
-    DidNotConverge,
-    NotPositiveDefinite,
-    Singular,
-    StepIncreased,
+pub enum MinimizerMessage {
+    Success,
+    TimedOut,
+    Error(&'static str),
 }
+type MinimizerOut<const D: usize> = (SVector<f64, D>, MinimizerMessage);
 
-impl From<NewtonError> for String {
-    fn from(value: NewtonError) -> Self {
-        match value {
-            NewtonError::DidNotConverge => "Iteration did not converge",
-            NewtonError::NotPositiveDefinite => "Hessian is not positive-definite",
-            NewtonError::Singular => "Hessian is singular",
-            NewtonError::StepIncreased => "Step increased error",
-        }
-        .into()
-    }
-}
-
-fn convertify<const D: usize>(out: MinimizerOut<D, NewtonError>) -> MinimizerOut<D, String> {
-    let (v, e) = out;
-    (v, e.map(Into::into))
-}
-
-fn newton_descent<const D: usize>(
+fn newton_descent<const D: usize, F: Differentiated<D>>(
     x0: &SVector<f64, D>,
-    function: &ErrorFunction<D>,
+    function: &ErrorFunction<D, F>,
     max_steps: usize,
-) -> MinimizerOut<D, NewtonError> {
+) -> MinimizerOut<D> {
     let threshold = 1e-12;
 
-    let f = &function.f;
-    let grad_f = &function.grad;
-    let hess_f = &function.hess;
-
     // TODO: See if the descent will find minima or maxima
-    if hess_f(x0).cholesky().is_none() {
-        return (*x0, Some(NewtonError::NotPositiveDefinite));
+    if function.hess(x0).cholesky().is_none() {
+        return (
+            *x0,
+            MinimizerMessage::Error("Hessian is not positive-definite!"),
+        );
     }
 
     let mut prev_f = f64::INFINITY;
     let mut x = *x0;
     for _ in 0..max_steps {
-        let g = grad_f(&x);
+        let g = function.grad(&x);
         if g.dot(&g).sqrt() < threshold {
-            info!("Newton did it!");
-            return (x, None);
+            info!("Newton converged!");
+            return (x, MinimizerMessage::Success);
         }
 
-        let Some(inv_hess) = hess_f(&x).try_inverse() else {
-            return (x, Some(NewtonError::Singular));
+        let Some(inv_hess) = function.hess(&x).try_inverse() else {
+            return (x, MinimizerMessage::Error("Hessian is singular!"));
         };
 
         // ensure step decreases function value by damping step if it does not
@@ -64,21 +44,23 @@ fn newton_descent<const D: usize>(
         loop {
             let next_x = x - damping * inv_hess * g;
 
-            if f(&next_x) < prev_f {
+            if function.f(&next_x) < prev_f {
                 x = next_x;
-                prev_f = f(&x);
+                prev_f = function.f(&x);
                 break;
             } else {
                 damping *= 0.5;
             }
 
             if damping < f64::EPSILON {
-                return (x, Some(NewtonError::StepIncreased));
+                // Should this be a success?
+                info!("Newton got a damping factor of zero");
+                return (x, MinimizerMessage::Success);
             }
         }
     }
 
-    (x, Some(NewtonError::DidNotConverge))
+    (x, MinimizerMessage::TimedOut)
 }
 
 struct BacktrackArgs {
@@ -97,22 +79,13 @@ impl BacktrackArgs {
     }
 }
 
-#[derive(Debug)]
-enum BacktrackError {
-    DidNotConverge,
-    TooSmallAlpha,
-}
-
-fn backtrack_descent<const D: usize>(
+fn backtrack_descent<const D: usize, F: Differentiated<D>>(
     x0: &SVector<f64, D>,
-    function: &ErrorFunction<D>,
+    function: &ErrorFunction<D, F>,
     max_steps: usize,
     backtrack_args: &BacktrackArgs,
-) -> MinimizerOut<D, BacktrackError> {
+) -> MinimizerOut<D> {
     let threshold = 1e-12;
-
-    let f = &function.f;
-    let grad_f = &function.grad;
 
     let c = backtrack_args.c;
     let tau = backtrack_args.tau;
@@ -122,18 +95,18 @@ fn backtrack_descent<const D: usize>(
     let mut prev_alpha = alpha_0;
 
     for _ in 0..max_steps {
-        let g = grad_f(&x);
+        let g = function.grad(&x);
         let g_norm = g.dot(&g).sqrt();
         if g_norm < threshold {
-            info!("Backtrack did it!");
-            return (x, None);
+            info!("Backtrack converged!");
+            return (x, MinimizerMessage::Success);
         }
 
-        let f_val = f(&x);
+        let f_val = function.f(&x);
         let t = c * g_norm.powi(2);
         let mut alpha = prev_alpha;
 
-        let accept = |alpha: f64| f_val - f(&(x - alpha * g)) >= alpha * t;
+        let accept = |alpha: f64| f_val - function.f(&(x - alpha * g)) >= alpha * t;
 
         // try to increase alpha in case previous value is too small
         let mut increased_alpha = false;
@@ -155,32 +128,32 @@ fn backtrack_descent<const D: usize>(
         prev_alpha = alpha;
 
         if alpha <= f64::EPSILON {
-            return (x, Some(BacktrackError::TooSmallAlpha));
+            // Should this be a success?
+            info!("Backtrack got a step size of zero");
+            return (x, MinimizerMessage::Success);
         }
 
         // gradient descent using optimal step size
         x -= alpha * g;
     }
 
-    (x, Some(BacktrackError::DidNotConverge))
+    (x, MinimizerMessage::TimedOut)
 }
 
-pub fn combined_descent<const D: usize>(
+pub fn combined_descent<const D: usize, F: Differentiated<D>>(
     x0: &SVector<f64, D>,
-    function: &ErrorFunction<D>,
-) -> MinimizerOut<D, String> {
+    function: &ErrorFunction<D, F>,
+) -> MinimizerOut<D> {
     const STEP_COUNTS: [usize; 4] = [10, 100, 1000, 10_000];
 
     const MIN_STEPS: usize = STEP_COUNTS[0];
     const MAX_STEPS: usize = STEP_COUNTS[STEP_COUNTS.len() - 1];
 
-    let f = &function.f;
-
     let mut best_params = *x0;
-    let mut best_f = f(&best_params);
+    let mut best_f = function.f(&best_params);
 
     for step_count in STEP_COUNTS {
-        info!("Trying {} iterations...", step_count);
+        debug!("Trying {} iterations...", step_count);
 
         // try a quick backtrack minimization to find approximate minimum
         let backtrack_out = match backtrack_descent(
@@ -189,28 +162,34 @@ pub fn combined_descent<const D: usize>(
             step_count,
             &BacktrackArgs::default(),
         ) {
-            (p, None) => return (p, None),
-            (p, Some(BacktrackError::DidNotConverge)) => p,
-            (_, Some(BacktrackError::TooSmallAlpha)) => {
-                return (best_params, Some("Backtrack can't improve".into()))
+            (p, MinimizerMessage::Success) => return (p, MinimizerMessage::Success),
+            (p, MinimizerMessage::TimedOut) => p,
+            _ => {
+                return (
+                    best_params,
+                    MinimizerMessage::Error("Backtrack can't improve"),
+                )
             }
         };
-        let f_backtrack = f(&backtrack_out);
+        let f_backtrack = function.f(&backtrack_out);
         if f_backtrack > best_f {
-            return (best_params, Some("Backtrack increased error?!".into()));
+            return (
+                best_params,
+                MinimizerMessage::Error("Backtrack increased error?!"),
+            );
         }
 
         // try to use newton to improve result
-        let (newton_out, newton_error) = newton_descent(&backtrack_out, function, MIN_STEPS);
-        if f(&newton_out) < f_backtrack {
-            match newton_error {
-                None => return (newton_out, None),
-                Some(NewtonError::DidNotConverge) => {
-                    return convertify(newton_descent(&newton_out, function, MAX_STEPS))
+        let (newton_out, newton_message) = newton_descent(&backtrack_out, function, MIN_STEPS);
+        if function.f(&newton_out) < f_backtrack {
+            match newton_message {
+                MinimizerMessage::Success => return (newton_out, MinimizerMessage::Success),
+                MinimizerMessage::TimedOut => {
+                    return newton_descent(&newton_out, function, MAX_STEPS)
                 }
-                Some(_) => {
+                _ => {
                     best_params = newton_out;
-                    best_f = f(&newton_out);
+                    best_f = function.f(&newton_out);
                     continue;
                 }
             }
@@ -220,17 +199,17 @@ pub fn combined_descent<const D: usize>(
         best_f = f_backtrack;
     }
 
-    (best_params, Some("Combined descent never converged".into()))
+    (
+        best_params,
+        MinimizerMessage::Error("Combined descent never converged"),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::{
-        error_functions::get_error_functions,
-        functions::{line::Line, Differentiated},
-    };
+    use crate::functions::line::Line;
     use core::f64::consts::{E, PI};
     use nalgebra::Vector2;
 
@@ -263,23 +242,23 @@ mod tests {
         }
 
         let p0 = Vector2::from_element(1.0);
-        let error_function = get_error_functions::<2, Line>(x_ray.into(), y_ray.into());
-        let (optimal_parameters, error) = match mode {
+        let error_function = ErrorFunction::<2, Line>::new(&x_ray, &y_ray);
+        let (optimal_parameters, message) = match mode {
             Mode::Backtrack => {
-                let (p, e) =
-                    backtrack_descent(&p0, &error_function, 1000, &BacktrackArgs::default());
-                (p, e.map(|e| format!("{:?}", e)))
+                backtrack_descent(&p0, &error_function, 1000, &BacktrackArgs::default())
             }
-            Mode::Newton => {
-                let (p, e) = newton_descent(&p0, &error_function, 10);
-                (p, e.map(|e| format!("{:?}", e)))
-            }
+            Mode::Newton => newton_descent(&p0, &error_function, 10),
             Mode::Combined => combined_descent(&p0, &error_function),
         };
 
-        if let Some(error) = error {
+        let MinimizerMessage::Success = message else {
+            let error = match message {
+                MinimizerMessage::TimedOut => "Timed out",
+                MinimizerMessage::Error(s) => s,
+                _ => "???",
+            };
             panic!("{:?} got error: {:?}", mode, error);
-        }
+        };
 
         let threshold = match mode {
             Mode::Backtrack => 1e-10,

@@ -7,14 +7,14 @@ mod statistics;
 mod utils;
 
 use clap::Parser;
-use log::{info, warn};
+use log::{info, warn, LevelFilter};
 use nalgebra::SVector;
-use std::{path::PathBuf, rc::Rc, time::Instant};
+use std::{env, path::PathBuf, time::Instant};
 use strum::VariantNames;
 
-use error_functions::get_error_functions;
+use error_functions::ErrorFunction;
 use functions::{Differentiated, Functions};
-use minimizers::combined_descent;
+use minimizers::{combined_descent, MinimizerMessage};
 use parameter_gui::create_gui;
 use plotting::plotter::plot_static;
 use statistics::get_uncertainties;
@@ -36,17 +36,17 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
     plot_result: bool,
 ) -> (SVector<f64, D>, SVector<f64, D>, f64) {
     let (x_ray, y_ray) = utils::load_txt(datafile).unwrap();
-    let x_ray = Rc::new(x_ray);
-    let y_ray = Rc::new(y_ray);
-    let error_function = get_error_functions::<D, F>(x_ray.clone(), y_ray.clone());
+    let error_function = ErrorFunction::<D, F>::new(&x_ray, &y_ray);
 
-    let (optimal_parameters, error) = combined_descent(&initial_parameters, &error_function);
-    if let Some(error) = error {
+    let start = Instant::now();
+    let (optimal_parameters, message) = combined_descent(&initial_parameters, &error_function);
+    if let MinimizerMessage::Error(error) = message {
         warn!("{}", error);
     }
 
     let parameter_uncertainties = get_uncertainties::<D, F>(&x_ray, &y_ray, &optimal_parameters);
-    let error = (error_function.f)(&optimal_parameters);
+    let error = error_function.f(&optimal_parameters);
+    info!("Descent took {}", utils::format_duration(start.elapsed()));
 
     if plot_result {
         let data_name = datafile.file_stem().unwrap().to_string_lossy();
@@ -96,7 +96,17 @@ fn main() {
         );
     }
 
-    pretty_env_logger::init();
+    let mut builder = pretty_env_logger::formatted_timed_builder();
+    if let Ok(s) = env::var("RUST_LOG") {
+        builder.parse_filters(&s);
+    } else {
+        builder.filter_level(if args.fast {
+            LevelFilter::Info
+        } else {
+            LevelFilter::Warn
+        });
+    }
+    builder.init();
 
     if args.initial_parameters.is_some() && args.function.is_some() {
         let (parameters, function) = (
@@ -120,11 +130,8 @@ fn main() {
         let Some(function) = args.function else {
             panic!("You must specify a function when running program headless!");
         };
-        let start = Instant::now();
         let (optimal_parameters, parameter_uncertainties, error) =
             function.optimizinate(&args.datafile, &args.initial_parameters, true);
-
-        info!("Descent took {}", utils::format_duration(start.elapsed()));
 
         println!(
             "Got optimal parameters: {}, which gives an error of {}",
