@@ -16,5 +16,8 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build
+    - name: Lint
+      # I can't use cargo fmt as the files in 'functions' are mod-ed in a macro
+      run: rustfmt src/main.rs src/functions/*.rs --check
     - name: Run tests
       run: cargo test
