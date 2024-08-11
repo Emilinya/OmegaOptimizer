@@ -21,9 +21,16 @@ pub fn create_gui(
     initial_parameters: Option<Vec<f64>>,
 ) {
     const SCALE: f32 = 1.25;
+    const ICON: &[u8; 64 * 64 * 4] = include_bytes!("../media/icon.raw");
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([640.0 * SCALE, 520.0 * SCALE]),
+        viewport: egui::ViewportBuilder::default()
+            .with_icon(egui::IconData {
+                rgba: ICON.to_vec(),
+                width: 64,
+                height: 64,
+            })
+            .with_inner_size([640.0 * SCALE, 520.0 * SCALE]),
         follow_system_theme: false,
         ..Default::default()
     };
@@ -31,7 +38,7 @@ pub fn create_gui(
     let datafile_clone = datafile.to_path_buf();
 
     eframe::run_native(
-        "Parameter Finder",
+        "Omega Optimizer",
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_zoom_factor(SCALE);
@@ -144,10 +151,6 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Find good initial parameters");
-
-            ui.add_space(2.0);
-
             // Function combo box
             egui::ComboBox::from_label("Select a function")
                 .selected_text(format!("{:?}", self.function))
