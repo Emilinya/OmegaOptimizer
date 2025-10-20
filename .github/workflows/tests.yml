@@ -17,8 +17,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build
-    - name: Lint
+    - name: Format
       # I can't use cargo fmt as the files in 'functions' are mod-ed in a macro
-      run: rustfmt src/main.rs src/functions/*.rs --check
+      run: rustfmt src/main.rs src/functions/*.rs --style-edition=2024 --check
+    - name: Lint
+      run: cargo clippy
     - name: Run tests
       run: cargo test
