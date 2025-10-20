@@ -1,12 +1,11 @@
 use eframe::egui;
 use egui::{Color32, Widget};
 use egui_plot::{Line, Plot, PlotPoints, Points};
-use itertools::{izip, Itertools, MinMaxResult};
+use itertools::{Itertools, MinMaxResult, izip, repeat_n};
 use strum::IntoEnumIterator;
 
 use std::{
     collections::HashMap,
-    iter::repeat,
     path::{Path, PathBuf},
 };
 
@@ -31,7 +30,6 @@ pub fn create_gui(
                 height: 64,
             })
             .with_inner_size([640.0 * SCALE, 520.0 * SCALE]),
-        follow_system_theme: false,
         ..Default::default()
     };
 
@@ -77,7 +75,7 @@ impl ParameterStore {
         let count = function.parameter_count();
         let values = values
             .clone()
-            .unwrap_or_else(|| repeat(1.0).take(count).collect());
+            .unwrap_or_else(|| repeat_n(1.0, count).collect());
 
         let names = function.parameter_names();
         let (strings, values) = Self::slice_to_values(&values);
@@ -104,7 +102,7 @@ impl ParameterStore {
     }
 
     fn reset(&mut self) {
-        let ones: Vec<f64> = repeat(1.0).take(self.names.len()).collect();
+        let ones: Vec<f64> = repeat_n(1.0, self.names.len()).collect();
         (self.strings, self.values) = Self::slice_to_values(&ones);
         self.uncertainties = None;
     }
@@ -266,7 +264,7 @@ impl eframe::App for MyApp {
             let data: PlotPoints = izip!(&self.x_ray, &self.y_ray)
                 .map(|(x, y)| [*x, *y])
                 .collect();
-            let data_points = Points::new(data)
+            let data_points = Points::new("Data", data)
                 .radius(4.0)
                 .color(Color32::from_hex("#1f77b4").unwrap());
 
@@ -284,7 +282,7 @@ impl eframe::App for MyApp {
                         [x, self.function.f(x, &params)]
                     })
                     .collect();
-                Some(Line::new(function).color(Color32::from_hex("#ff7f0e").unwrap()))
+                Some(Line::new("Function", function).color(Color32::from_hex("#ff7f0e").unwrap()))
             } else {
                 None
             };

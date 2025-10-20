@@ -7,14 +7,14 @@ mod statistics;
 mod utils;
 
 use clap::Parser;
-use log::{info, warn, LevelFilter};
+use log::{LevelFilter, info, warn};
 use nalgebra::SVector;
 use std::{env, path::PathBuf, time::Instant};
 use strum::VariantNames;
 
 use error_functions::ErrorFunction;
 use functions::{Differentiated, Functions};
-use minimizers::{combined_descent, MinimizerMessage};
+use minimizers::{MinimizerMessage, combined_descent};
 use parameter_gui::create_gui;
 use plotting::plotter::plot_static;
 use statistics::get_uncertainties;
