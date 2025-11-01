@@ -6,8 +6,8 @@ use strum_macros::{EnumIter, EnumString, VariantNames};
 
 use std::{path::PathBuf, str::FromStr};
 
-use crate::optimizinate;
 use crate::utils::prettify_list;
+use crate::{OptimizinateResult, optimizinate};
 
 pub trait Differentiated<const D: usize> {
     const PARAMETER_NAMES: [&'static str; D];
@@ -24,7 +24,7 @@ macro_rules! create_function_enum {
     ($($file:ident::$typename:ident<$D:literal>),*,) => {
         $(pub mod $file);*;
 
-        #[derive(Clone, PartialEq, Eq, Hash, Debug, EnumString, EnumIter, VariantNames)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, EnumIter, VariantNames)]
         #[strum(serialize_all = "snake_case")]
         pub enum Functions {
             $($typename),*
@@ -90,20 +90,19 @@ macro_rules! create_function_enum {
             pub fn optimizinate(
                 &self,
                 datafile: &PathBuf,
-                initial_parameter_opt: &Option<Vec<f64>>,
+                initial_parameter_opt: Option<&[f64]>,
                 plot_result: bool,
-            ) -> (Vec<f64>, Vec<f64>, f64) {
+            ) -> OptimizinateResult {
                 match self {
                     $(Self::$typename => {
                         let initial_parameters = if let Some(parameters) = initial_parameter_opt {
-                            SVector::<f64, $D>::from_vec(parameters.clone())
+                            SVector::<f64, $D>::from_vec(parameters.to_vec())
                         } else {
                             SVector::<f64, $D>::from_element(1.0)
                         };
-                        let (p, u, e) = optimizinate::<$D, $file::$typename>(
+                        optimizinate::<$D, $file::$typename>(
                             datafile, initial_parameters, plot_result
-                        );
-                        (p.data.as_slice().to_vec(), u.data.as_slice().to_vec(), e)
+                        )
                     }),*
                 }
             }

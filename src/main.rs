@@ -19,6 +19,13 @@ use parameter_gui::create_gui;
 use plotting::plotter::plot_static;
 use statistics::get_uncertainties;
 
+#[derive(Debug, Clone)]
+struct OptimizinateResult {
+    parameters: Vec<f64>,
+    uncertainties: Vec<f64>,
+    error: f64,
+}
+
 fn parse_initial_parameters(parameter_string: &str) -> Result<f64, String> {
     if parameter_string == "None" {
         Ok(1.0)
@@ -34,7 +41,7 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
     datafile: &PathBuf,
     initial_parameters: SVector<f64, D>,
     plot_result: bool,
-) -> (SVector<f64, D>, SVector<f64, D>, f64) {
+) -> OptimizinateResult {
     let (x_ray, y_ray) = utils::load_txt(datafile).unwrap();
     let error_function = ErrorFunction::<D, F>::new(&x_ray, &y_ray);
 
@@ -62,7 +69,11 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
         );
     }
 
-    (optimal_parameters, parameter_uncertainties, error)
+    OptimizinateResult {
+        parameters: optimal_parameters.as_slice().to_vec(),
+        uncertainties: parameter_uncertainties.as_slice().to_vec(),
+        error,
+    }
 }
 
 #[derive(Parser)]
@@ -130,13 +141,13 @@ fn main() {
         let Some(function) = args.function else {
             panic!("You must specify a function when running program headless!");
         };
-        let (optimal_parameters, parameter_uncertainties, error) =
-            function.optimizinate(&args.datafile, &args.initial_parameters, true);
+        let result =
+            function.optimizinate(&args.datafile, args.initial_parameters.as_deref(), true);
 
         println!(
             "Got optimal parameters: {}, which gives an error of {}",
-            utils::format_with_uncertainty(&optimal_parameters, &parameter_uncertainties),
-            utils::g_format(error, 5)
+            utils::format_with_uncertainty(&result.parameters, &result.uncertainties),
+            utils::g_format(result.error, 5)
         );
     }
 }
