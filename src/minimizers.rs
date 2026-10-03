@@ -4,6 +4,7 @@ use nalgebra::SVector;
 use crate::Differentiated;
 use crate::error_functions::ErrorFunction;
 
+#[derive(Debug, Clone, Copy)]
 pub enum MinimizerMessage {
     Success,
     TimedOut,
