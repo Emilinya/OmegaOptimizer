@@ -1,5 +1,5 @@
 [package]
-name = "omega_optimizer_2"
+name = "omega_optimizer"
 version = "0.1.0"
 edition = "2021"
 
