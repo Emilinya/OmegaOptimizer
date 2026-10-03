@@ -1,7 +1,7 @@
 use crate::error_functions::Function;
+use log::info;
 use nalgebra::SVector;
 use std::convert::Into;
-use log::info;
 
 type MinimizerOut<const D: usize, E> = (SVector<f64, D>, Option<E>);
 
@@ -200,7 +200,7 @@ pub fn combined_descent<const D: usize>(
                     best_params = newton_out;
                     best_f = f(&newton_out);
                     continue;
-                },
+                }
             }
         }
 

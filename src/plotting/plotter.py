@@ -19,7 +19,7 @@ def main():
     os.makedirs(head, exist_ok=True)
 
     plt.style.use("dark_background")
-    # plt.title(r"$\mathbf{a} = $" + parameters)
+    plt.title(r"$\mathbf{a} = $" + parameters)
     plt.grid(alpha=0.4)
     plt.plot(data_in, data_out, "o", color="#1f77b4", label="input data")
     plt.plot(x_ray, y_ray, color="#ff7f0e", label="best fit model")
