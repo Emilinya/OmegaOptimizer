@@ -1,14 +1,18 @@
 # Omega Optimizer
 
-*Omega Optimizer* is a program that finds the parameters such that a parametrized function best matches some data. It uses a gui where you can see your data, choose from several parameterized functions, run the optimizer, and save the result as a figure.
+*Omega Optimizer* is a program that finds the parameters such that a parametrized function best matches some data. It uses a gui where you can see your data, choose from several parameterized functions, run the optimizer, and save the result as a figure. I have written a blog post on how this program works, which you can read on [my website](http://blog.emilie.moe/omega_optimizer/).
 
 <p align="center">
 <img src="media/gui_example.png" width="75%"/>
 </p>
 
+## Usage
+
+The program is run using `cargo run --release -- <datafile>`, where `<datafile>` is the path to a plain text file with x-values in the first column and y-values in the second column, with the values separated by a space. The program can also be ran without the gui using the `-f` flag. In this case, you must also provide a function. To print a list of available functions, use the `-p` flag. For more options, see the `-h` flag.
+
 ## Adding a new function
 
-*Omega Optimizer* currently has 6 functions to choose from. If none of them matches your dataset, you can easily add a new function *Omega Optimizer* by following these steps:
+*Omega Optimizer* currently has 6 functions to choose from. If none of them matches your dataset, you can easily add a new function by following these steps:
 
 1. Calculate the gradient and hessian of your function with respect to its parameters. 
 2. Create a new rust file in `src/functions` where you create a new struct named after your function.
