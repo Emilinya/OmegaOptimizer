@@ -4,24 +4,29 @@ import sympy as sp
 from sympy.printing.rust import rust_code
 from sympy.parsing.sympy_parser import parse_expr
 
+
 def good_rust_code(expression):
     rust = rust_code(expression)
-    for match in re.findall('.?\d+.?', rust):
+    assert isinstance(rust, str)
+
+    for match in re.findall(r".?\d+.?", rust):
         if match[0] != "f" and match[0] != "/":
             if match[-1] != "." and match[-1] != "_":
-                if (match[-1] == "*"):
+                if match[-1] == "*":
                     rust = rust.replace(match, match[:-1] + "_f64*")
-                elif (match[0] == " "):
+                elif match[0] == " ":
                     rust = rust.replace(match, match[:-1] + "_f64" + match[-1])
-                elif (match[-1] != ")"):
+                elif match[-1] != ")":
                     rust += "_f64"
     return rust
+
 
 def get_param_def(expression, params_str, param_sym):
     string = "let "
     varstr = "("
     varstr += ", ".join(
-        p_str for p_str, p_sym in zip(params_str, param_sym) 
+        p_str
+        for p_str, p_sym in zip(params_str, param_sym)
         if p_sym in expression.free_symbols
     )
     varstr += ")"
@@ -29,23 +34,24 @@ def get_param_def(expression, params_str, param_sym):
     if varstr == "()":
         return ""
 
-    if not "," in varstr:
+    if "," not in varstr:
         varstr = varstr[1:-1]
     string += varstr
 
-    
     parstr = "("
     parstr += ", ".join(
-        f'params[{i}]' for i, p_sym in enumerate(param_sym) 
+        f"params[{i}]"
+        for i, p_sym in enumerate(param_sym)
         if p_sym in expression.free_symbols
     )
     parstr += ")"
 
-    if not "," in parstr:
+    if "," not in parstr:
         parstr = parstr[1:-1]
     string += " = " + parstr + ";"
 
     return string
+
 
 def rustify_array(array):
     string = "["
@@ -55,16 +61,17 @@ def rustify_array(array):
 
     return string
 
+
 def rustify_matrix(matrix):
     string = "[\n"
     n = matrix.shape[1]
     for i, v in enumerate(matrix):
         if i % n == 0:
             string += "\t\t["
-        
+
         string += good_rust_code(v)
 
-        if (i+1) % n == 0:
+        if (i + 1) % n == 0:
             string += "],\n"
         else:
             string += ", "
@@ -72,16 +79,17 @@ def rustify_matrix(matrix):
 
     return string
 
-def function_str(f, f_name):
+
+def function_str(f, variable, parameters, params, f_name):
     string = "#[allow(non_snake_case)]\n"
     try:
         dim = len(f.shape)
-    except:
+    except AttributeError:
         dim = 0
 
     out = "f64" if dim == 0 else "Array1<f64>" if dim == 1 else "Array2<f64>"
     string += f"pub fn {f_name}({variable}: f64, params: &Array1<f64>) -> {out} {{\n"
-        
+
     param_def = get_param_def(f, parameters, params)
     if param_def == "":
         string = string.replace("params", "_")
@@ -89,11 +97,11 @@ def function_str(f, f_name):
         string += "\t" + param_def + "\n"
 
     if dim == 0:
-        return_str = f"\treturn {good_rust_code(f)};\n}}"
+        return_str = f"\t{good_rust_code(f)}\n}}"
     elif dim == 1:
-        return_str = f"\treturn array!{rustify_array(f)};\n}}"
+        return_str = f"\tarray!{rustify_array(f)}\n}}"
     else:
-        return_str = f"\treturn array!{rustify_matrix(f)};\n}}"
+        return_str = f"\tarray!{rustify_matrix(f)}\n}}"
 
     if not variable in return_str:
         string = string.replace(f"{variable}:", "_:")
@@ -102,34 +110,40 @@ def function_str(f, f_name):
 
     return string
 
-datafile = "datafile.dat" if len(sys.argv) < 2 else sys.argv[1]
-datapath = f"data/{datafile}"
+def main():
+    datafile = "datafile.dat" if len(sys.argv) < 2 else sys.argv[1]
+    datapath = f"data/{datafile}"
 
-with open(datapath, "r") as datafile:
-    match = re.search('.*?\((.*?);\s*?(.*?)\)\s*?=\s*?(.*)', datafile.readline())
-    variable, parameters, expression = match[1], match[2], match[3]
+    with open(datapath, "r", encoding="utf8") as datafile:
+        match = re.search(r".*?\((.*?);\s*?(.*?)\)\s*?=\s*?(.*)", datafile.readline())
+        if match is None:
+            raise ValueError("Waaaa")
+        variable, parameters, expression = match[1], match[2], match[3]
 
-parameters = parameters.replace(" ", "").split(",")
-x, *params = sp.symbols(f"{variable}, {' '.join(parameters)}") 
+    parameters = parameters.replace(" ", "").split(",")
+    x, *params = sp.symbols(f"{variable}, {' '.join(parameters)}")
 
-local_dict = {s: v for s, v in zip(parameters, params)}
-local_dict[variable] = x
+    local_dict = {s: v for s, v in zip(parameters, params)}
+    local_dict[variable] = x
 
-symbolic_f = parse_expr(expression, local_dict = local_dict)
-symbolic_grad_f = sp.simplify(sp.derive_by_array(symbolic_f, params))
-symbolic_hessian = sp.simplify(sp.derive_by_array(symbolic_grad_f, params).tomatrix())
+    symbolic_f = parse_expr(expression, local_dict=local_dict)
+    symbolic_grad_f = sp.simplify(sp.derive_by_array(symbolic_f, params))
+    symbolic_hessian = sp.simplify(sp.derive_by_array(symbolic_grad_f, params).tomatrix())
 
-N = len(params)
-
-with open("src/function.rs", "w") as funcfile:
-    funcfile.write(f"""\
+    with open("src/function.rs", "w", encoding="utf8") as funcfile:
+        funcfile.write(
+            f"""\
 // this file is autogenerated by process_data.py, do not edit
 
 use ndarray::prelude::*;
 
-{function_str(symbolic_f, "f")}
+{function_str(symbolic_f, variable, parameters, params, "f")}
 
-{function_str(symbolic_grad_f, "grad_f")}
+{function_str(symbolic_grad_f, variable, parameters, params, "grad_f")}
 
-{function_str(symbolic_hessian, "hess_f")}
-""")
+{function_str(symbolic_hessian, variable, parameters, params, "hess_f")}
+"""
+        )
+
+if __name__ == "__main__":
+    main()

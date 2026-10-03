@@ -12,22 +12,21 @@ name = "" if len(sys.argv) < 3 else sys.argv[2]
 names = ["sqrt", "line", "normal", "sine"]
 
 for file in os.listdir("figures"):
-    if isfile(f"figures/{file}"):
-        if file.split("_")[0] in names:
-            subprocess.run(["rm", f"figures/{file}"])
+    if isfile(f"figures/{file}") and file.split("_")[0] in names:
+        os.remove(f"figures/{file}")
 
 if name.strip() == "":
     for name in ["sqrt", "line", "normal", "sine"]:
         print(f"Creating test data {name}")
         start = time.time()
-        subprocess.run([python, "data/create_data.py", name])
+        subprocess.run([python, "data/create_data.py", name], check=True)
         print(f"Created test data in {(time.time() - start):.2g} s")
-        subprocess.run([python, "make/run.py", "datafile.dat", force_compile, name])
+        subprocess.run([python, "make/run.py", "datafile.dat", force_compile, name], check=True)
         print()
 else:
     print(f"Creating test data {name}")
     start = time.time()
-    subprocess.run([python, "data/create_data.py", name])
+    subprocess.run([python, "data/create_data.py", name], check=True)
     print(f"Created test data in {(time.time() - start):.2g} s")
-    subprocess.run([python, "make/run.py", "datafile.dat", force_compile, name])
+    subprocess.run([python, "make/run.py", "datafile.dat", force_compile, name], check=True)
     print()
