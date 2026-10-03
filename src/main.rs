@@ -119,20 +119,16 @@ fn main() {
     }
     builder.init();
 
-    if args.initial_parameters.is_some() && args.function.is_some() {
-        let (parameters, function) = (
-            args.initial_parameters.as_ref().unwrap(),
-            args.function.as_ref().unwrap(),
-        );
-        if parameters.len() != function.parameter_count() {
-            panic!(
-                "Got invalid number of initial parameters. \
+    if let (Some(parameters), Some(function)) = (&args.initial_parameters, &args.function)
+        && parameters.len() != function.parameter_count()
+    {
+        panic!(
+            "Got invalid number of initial parameters. \
                 {:?} takes {} parameters, but got {}.",
-                function,
-                function.parameter_count(),
-                parameters.len()
-            );
-        }
+            function,
+            function.parameter_count(),
+            parameters.len()
+        );
     }
 
     if !args.fast {

@@ -295,7 +295,7 @@ impl MyApp {
             .map(|(x, y)| [*x, *y])
             .collect();
         let data_points = Points::new("Data", data)
-            .radius(4.0)
+            .radius(4.0f32)
             .color(Color32::from_hex("#1f77b4").unwrap());
 
         let line = if parameter_store.values.iter().all(Option::is_some) {

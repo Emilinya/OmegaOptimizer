@@ -1,5 +1,5 @@
-[![GNU GPLv3 License](https://img.shields.io/github/license/Emilinya/OmegaOptimizer)](https://choosealicense.com/licenses/gpl-3.0/)
-[![Test TopOpt](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml/badge.svg?style=plastic)](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml)
+[![European Union Public Licence](https://img.shields.io/badge/lisence-EUPL-blue)](https://interoperable-europe.ec.europa.eu/sites/default/files/custom-page/attachment/eupl_v1.2_en.pdf)
+[![Test Badge](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml/badge.svg?style=plastic)](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml)
 
 # Omega Optimizer
 
