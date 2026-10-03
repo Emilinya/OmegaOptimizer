@@ -1,69 +1,229 @@
 use std::io::{Write, BufReader, BufRead};
+use std::collections::HashMap;
 use std::process::Command;
 use std::time::Instant;
 use std::fs::File;
+use std::env;
 
 use ndarray::prelude::*;
 use itertools::izip;
+use regex::Regex;
 
+mod utils;
 mod function;
 mod error_funcs;
 mod descent_funcs;
 
+use utils::*;
 use function::*;
 use error_funcs::*;
 use descent_funcs::combined_descent;
 
+fn plot_path(datafile: &str, descent_path_file: &str, img_folder: &str, img_prefix: &str) {
+	let mut run_python = {
+		if cfg!(target_os = "windows") {
+			Command::new("python")
+		} else {
+			Command::new("python3")
+		}
+	};
+	run_python.args(vec![
+		"plotting/path_plotter.py",
+		&format!("data/{}", datafile),
+		descent_path_file,
+		img_folder,
+		img_prefix,
+	]).spawn().unwrap().wait().unwrap();
+}
+
 fn plot(
-    x_ray: &Array1<f64>, y_ray: &Array1<f64>,
-    f: fn(f64, &Array1<f64>) -> f64,
-    amin: &Array1<f64>, filename: &str
+	x_ray: &Array1<f64>, y_ray: &Array1<f64>,
+	f: fn(f64, &Array1<f64>) -> f64,
+	amin: &Array1<f64>, filename: &str
 ) {
-    let mut file = File::create("plotting/data.dat").unwrap();
-    writeln!(&mut file, "{}", filename).unwrap();
-    for (x, y) in izip!(x_ray, y_ray) {
-        writeln!(&mut file, "{} {} {}", x, y, f(*x, amin)).unwrap();
-    }
-    let mut run_python = {
-        if cfg!(target_os = "windows") {
-            Command::new("python")
-        } else {
-            Command::new("python3")
-        }
-    };
-    run_python.arg("plotting/plotter.py").spawn().expect(":(").wait().unwrap();
+	let mut file = File::create("plotting/data.dat").unwrap();
+	writeln!(&mut file, "{}", filename).unwrap();
+	for (x, y) in izip!(x_ray, y_ray) {
+		writeln!(&mut file, "{} {} {}", x, y, f(*x, amin)).unwrap();
+	}
+	let mut run_python = {
+		if cfg!(target_os = "windows") {
+			Command::new("python")
+		} else {
+			Command::new("python3")
+		}
+	};
+	run_python.arg("plotting/plotter.py").spawn().unwrap().wait().unwrap();
+}
+
+fn get_initial_params(datafile: &str, num_params: usize) -> Array1<f64> {
+	// See if user has found initial params
+	let file = File::open("preprocessor/initial_params.dat");
+	match file {
+		Ok(file) => {
+			let mut reader = BufReader::new(file); 
+			let mut buf = "".to_string();
+			match reader.read_line(&mut buf) {
+				Ok(_) => { },
+				Err (err) => { 
+					eprintln!("Got error when reading initial parameters: {}", err); 
+					buf = "".to_string();
+				}
+			}
+			if buf != "".to_string() {
+				let param_results: Result<Vec<f64>, _> = buf.split(" ").map(|s| s.parse::<f64>()).collect();
+				match param_results {
+					Ok(params) => {
+						if params.len() == num_params {
+							return Array::from(params);
+						} else {
+							println!("initial_params.dat does not have the correct amount of values");
+						}
+					}
+					Err(_) => {
+						println!("initial_params.dat is not formated correctly");
+					}
+				}
+			}
+		},
+		_ => { },
+	}
+
+	// If not, see if datafile has any parameter values
+	let mut initial_params = Array::ones(num_params);
+
+	let file = match File::open(format!("data/{}", datafile)) {
+		Ok(file) => file,
+		Err(_) => { return initial_params; },
+	};
+
+	let mut buf = "".to_string();
+	let mut header = "".to_string();
+	let mut reader = BufReader::new(file);
+
+	// we first create a map from variable to index
+	match reader.read_line(&mut header) {
+		Ok(_) => {
+			let re = Regex::new(r".*?\((.*?);\s*(.*?)\)\s*=\s*(.*?)").unwrap();
+			let caps = re.captures(&header).unwrap();
+			let varable_iter = caps[2].split(",").enumerate().map(|(i, v)| (v.trim(), i));
+			let variable_map: HashMap<&str, usize> = HashMap::from_iter(varable_iter);
+
+			match reader.read_line(&mut buf) {
+				Ok(_) => {
+					let params: Vec<Vec<&str>> = buf.split(",").map(
+						|s| s.trim().split("=").collect()
+					).collect();
+
+					if params.iter().all(|vec| vec.len() == 2) {
+						for pair in params {
+							let (var, val) = (pair[0], pair[1]);
+							let val = &val.replace(&['\n', '\r'][..], "");
+							if variable_map.contains_key(var) {
+								match val.parse::<f64>() {
+									Ok(v) => { initial_params[variable_map[var]] = v; },
+									Err(_) => { 
+										println!(
+											"Malformed parameter value for parameter {}: {:?}",
+											var, val
+										);
+									}
+								}
+							} else {
+								println!("Unknown parameter {:?}", var);
+							}
+						}
+					};
+				},
+				Err(err) => { eprintln!("Got error when reading datafile: {}", err); },
+			};
+		},
+		Err(err) => { eprintln!("Got error when reading datafile: {}", err); },
+	};
+
+	return initial_params;
 }
 
 fn main() {
-    let file = File::open("data/datafile.dat").unwrap();
-    let mut reader = BufReader::new(file);
-    let mut buf: String = "".to_string();
-    reader.read_line(&mut buf).unwrap();
-    let num_params = buf.split(" = ").next().unwrap().split("; ").last().unwrap().split(", ").count();
+	let mut arg_map: HashMap<String, String> = HashMap::new();
+	env::args().enumerate().for_each(|(i, v)| {
+		if i != 0 {
+			let arg_vec: Vec<&str> = v.split("=").collect();
+			if arg_vec.len() == 2 {
+				arg_map.insert(arg_vec[0].to_owned(), arg_vec[1].to_owned());
+			} else {
+				println!("Malformed argument: {}", v);
+			}
+		}
+	});
 
-    let (mut x_vec, mut y_vec) = (Vec::new(), Vec::new());
-    for line in reader.lines().map(|l| l.unwrap()) {
-        let vals: Vec<&str> = line.split(" ").collect();
-        let (x, y) = (vals[0].parse::<f64>(), vals[1].parse::<f64>());
-        match (x, y) {
-            (Ok(x), Ok(y)) => { x_vec.push(x); y_vec.push(y); },
-            _ => { },
-        }
-    }
+	let datafile = match arg_map.get("datafile") {
+		Some(v) => v,
+		None => "datafile.dat"
+	};
+	println!("{}", datafile);
 
-    let x_ray = Array::from(x_vec);
-    let y_ray = Array::from(y_vec);
+	let file = match File::open(format!("data/{}", datafile)) {
+		Ok(file) => file,
+		Err(err) => { panic!("Got error when opening {}: {}", format!("data/{}", datafile), err) },
+	};
+	let mut reader = BufReader::new(file);
+	let mut buf: String = "".to_string();
+	match reader.read_line(&mut buf) {
+		Ok(_) => { },
+		Err(err) => { panic!("Got error when reading first line of datafile: {}", err) },
+	};
+	let re = Regex::new(r".*?\((.*?);\s*(.*?)\)\s*=\s*(.*?)").unwrap();
+	let caps = re.captures(&buf).unwrap();
+	let num_params = caps[2].split(", ").count();
 
-    let err_f = calc_err(x_ray.to_owned(), y_ray.to_owned(), f);
-    let grad_err_f = calc_grad_err(x_ray.to_owned(), y_ray.to_owned(), f, grad_f);
-    let inv_hess_err_f = calc_inv_hess_err(x_ray.to_owned(), y_ray.to_owned(), f, hess_f, outer_f);
+	let (mut x_vec, mut y_vec) = (Vec::new(), Vec::new());
+	for line in reader.lines() {
+		match line {
+			Ok(line) => {
+				let vals: Vec<&str> = line.split(" ").collect();
+				if vals.len() == 2 {
+					match (vals[0].parse::<f64>(), vals[1].parse::<f64>()) {
+						(Ok(x), Ok(y)) => { x_vec.push(x); y_vec.push(y); },
+						_ => { },
+					}
+				}
+			}
+			Err(_) => { },
+		}
+	}
 
+	let x_ray = Array::from(x_vec);
+	let y_ray = denoise(&Array::from(y_vec));
 
-    let now = Instant::now();
-    let initial_params = Array::ones(num_params);
-    let optimal_params = combined_descent(&initial_params, &*err_f, &*grad_err_f, &*inv_hess_err_f, true);
-    println!("Descent took {} ms", (now.elapsed().as_nanos() as f64) / 1_000_000_f64);
-    println!("Got the parameters {}", optimal_params);
+	let err_f = calc_err(x_ray.to_owned(), y_ray.to_owned(), f);
+	let grad_err_f = calc_grad_err(x_ray.to_owned(), y_ray.to_owned(), f, grad_f);
+	let hess_err_f = calc_hess_err(x_ray.to_owned(), y_ray.to_owned(), f, grad_f, hess_f);
 
-    plot(&x_ray, &y_ray, f, &optimal_params, "result.png")
+	let now = Instant::now();
+	let descent_path_file = "plotting/descent_path.dat";
+	let initial_params = get_initial_params(datafile, num_params);
+	let (optimal_params, params_are_good) = combined_descent
+		(&initial_params, &*err_f, &*grad_err_f, &*hess_err_f, true, descent_path_file
+	);
+	if !params_are_good {
+		eprintln!(
+			"Parameter optimizer might not have found optimal parameters. {}",
+			"If the result looks wrong, try again with different initial parameters"
+		);
+	}
+	let err = err_f(&optimal_params);
+
+	println!("Descent took {} ms", get_ms(now));
+	println!("Got the parameters: {}", optimal_params);
+	println!("The error is: {}", err);
+
+	let name = match arg_map.get("name") {
+		Some(v) => v,
+		None => ""
+	};
+
+	println!("Plotting ...");
+	plot_path(datafile, descent_path_file, "figures", &name);
+	plot(&x_ray, &y_ray, f, &optimal_params, "figures/result.png");
 }

@@ -1,13 +1,12 @@
 import re
-import numpy as np
+import sys
 import sympy as sp
-from sympy.matrices.expressions.matexpr import MatrixSymbol
-from sympy.parsing.sympy_parser import parse_expr
 from sympy.printing.rust import rust_code
+from sympy.parsing.sympy_parser import parse_expr
 
 def good_rust_code(expression):
     rust = rust_code(expression)
-    for match in re.findall('.?\d+?.?', rust):
+    for match in re.findall('.?\d+.?', rust):
         if match[0] != "f" and match[0] != "/":
             if match[-1] != "." and match[-1] != "_":
                 if (match[-1] == "*"):
@@ -19,23 +18,32 @@ def good_rust_code(expression):
     return rust
 
 def get_param_def(expression, params_str, param_sym):
-    string = "let ("
-    string += ", ".join(
+    string = "let "
+    varstr = "("
+    varstr += ", ".join(
         p_str for p_str, p_sym in zip(params_str, param_sym) 
         if p_sym in expression.free_symbols
     )
-    string += ")"
+    varstr += ")"
 
-    if string == "let ()":
+    if varstr == "()":
         return ""
 
+    if not "," in varstr:
+        varstr = varstr[1:-1]
+    string += varstr
+
     
-    string += " = ("
-    string += ", ".join(
+    parstr = "("
+    parstr += ", ".join(
         f'params[{i}]' for i, p_sym in enumerate(param_sym) 
         if p_sym in expression.free_symbols
     )
-    string += ");"
+    parstr += ")"
+
+    if not "," in parstr:
+        parstr = parstr[1:-1]
+    string += " = " + parstr + ";"
 
     return string
 
@@ -65,7 +73,7 @@ def rustify_matrix(matrix):
     return string
 
 def function_str(f, f_name):
-    string = ""
+    string = "#[allow(non_snake_case)]\n"
     try:
         dim = len(f.shape)
     except:
@@ -81,7 +89,7 @@ def function_str(f, f_name):
         string += "\t" + param_def + "\n"
 
     if dim == 0:
-        return_str = f"\treturn {rust_code(f)};\n}}"
+        return_str = f"\treturn {good_rust_code(f)};\n}}"
     elif dim == 1:
         return_str = f"\treturn array!{rustify_array(f)};\n}}"
     else:
@@ -94,22 +102,22 @@ def function_str(f, f_name):
 
     return string
 
-datapath = "data/datafile.dat"
+datafile = "datafile.dat" if len(sys.argv) < 2 else sys.argv[1]
+datapath = f"data/{datafile}"
 
 with open(datapath, "r") as datafile:
-    func, expr = datafile.readline().split("=")
+    match = re.search('.*?\((.*?);\s*?(.*?)\)\s*?=\s*?(.*)', datafile.readline())
+    variable, parameters, expression = match[1], match[2], match[3]
 
-variable, parameters = func[2:-2].split(";")
 parameters = parameters.replace(" ", "").split(",")
 x, *params = sp.symbols(f"{variable}, {' '.join(parameters)}") 
 
 local_dict = {s: v for s, v in zip(parameters, params)}
 local_dict[variable] = x
 
-symbolic_f = parse_expr(expr, local_dict = local_dict)
+symbolic_f = parse_expr(expression, local_dict = local_dict)
 symbolic_grad_f = sp.simplify(sp.derive_by_array(symbolic_f, params))
 symbolic_hessian = sp.simplify(sp.derive_by_array(symbolic_grad_f, params).tomatrix())
-symbolic_outer = sp.simplify(sp.Matrix(symbolic_grad_f) * sp.Matrix(symbolic_grad_f).T)
 
 N = len(params)
 
@@ -120,7 +128,8 @@ with open("src/function.rs", "w") as funcfile:
 use ndarray::prelude::*;
 
 {function_str(symbolic_f, "f")}
+
 {function_str(symbolic_grad_f, "grad_f")}
+
 {function_str(symbolic_hessian, "hess_f")}
-{function_str(symbolic_outer, "outer_f")}
 """)

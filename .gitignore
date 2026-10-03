@@ -1,4 +1,9 @@
 /target
+Cargo.lock
 src/function.rs
-result.png
+/figures
 *.dat
+
+/blog
+/previous
+__pycache__
