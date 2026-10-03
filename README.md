@@ -3,7 +3,7 @@
 *Omega Optimizer* is a program that finds the parameters such that a parametrized function best matches some data. It uses a gui where you can see your data, choose from several parameterized functions, run the optimizer, and save the result as a figure.
 
 <p align="center">
-<img src="media/normal_example.png" width="75%"/>
+<img src="media/gui_example.png" width="75%"/>
 </p>
 
 ## Adding a new function
@@ -13,7 +13,7 @@
 1. Calculate the gradient and hessian of your function with respect to its parameters. 
 2. Create a new rust file in `src/functions` where you create a new struct named after your function.
 3. Derive the `Differentiated<D>` trait for your struct, where D is the number of parameters.
-4. In `src/functions/mod.rs`, you will find a evocation of the `create_function_enum` macro. There, add a new line of the form `filename::StructName<D>`.
+4. In `src/functions/mod.rs`, you will find an evocation of the `create_function_enum` macro. There, add a new line of the form `filename::StructName<D>`.
 
 And now your function should be available as an option in the function list. To ensure you have implemented the gradient and hessian correctly, simply run `cargo test`, which tells you all indices that are implemented incorrectly.
 
