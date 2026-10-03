@@ -24,4 +24,4 @@ jobs:
     - name: Lint
       run: VERBOSE=1 make lint CLIPPY_OPTS="-D warnings"
     - name: Run tests
-      run: VERBOSE=1 make test
+      run: VERBOSE=1 make check
