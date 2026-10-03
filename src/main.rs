@@ -6,8 +6,9 @@ mod plotting;
 mod statistics;
 mod utils;
 
+use anyhow::Context;
 use clap::Parser;
-use log::{LevelFilter, info, warn};
+use log::LevelFilter;
 use nalgebra::SVector;
 use std::{env, path::PathBuf, time::Instant};
 use strum::VariantNames;
@@ -41,22 +42,25 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
     datafile: &PathBuf,
     initial_parameters: SVector<f64, D>,
     plot_result: bool,
-) -> OptimizinateResult {
-    let (x_ray, y_ray) = utils::load_txt(datafile).unwrap();
+) -> anyhow::Result<OptimizinateResult> {
+    let (x_ray, y_ray) = utils::load_txt(datafile)?;
     let error_function = ErrorFunction::<D, F>::new(&x_ray, &y_ray);
 
     let start = Instant::now();
     let (optimal_parameters, message) = combined_descent(&initial_parameters, &error_function);
     if let MinimizerMessage::Error(error) = message {
-        warn!("{}", error);
+        log::warn!("{}", error);
     }
 
-    let parameter_uncertainties = get_uncertainties::<D, F>(&x_ray, &y_ray, &optimal_parameters);
+    let parameter_uncertainties = get_uncertainties::<D, F>(&x_ray, &y_ray, &optimal_parameters)?;
     let error = error_function.f(&optimal_parameters);
-    info!("Descent took {}", utils::format_duration(start.elapsed()));
+    log::info!("Descent took {}", utils::format_duration(start.elapsed()));
 
     if plot_result {
-        let data_name = datafile.file_stem().unwrap().to_string_lossy();
+        let data_name = datafile
+            .file_stem()
+            .context("Datafile missing file stem")?
+            .to_string_lossy();
         let figure_name = format!("figures/{}-{}.png", data_name, F::NAME);
 
         plot_static(
@@ -66,14 +70,14 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
             &optimal_parameters,
             &parameter_uncertainties,
             &figure_name,
-        );
+        )?;
     }
 
-    OptimizinateResult {
+    Ok(OptimizinateResult {
         parameters: optimal_parameters.as_slice().to_vec(),
         uncertainties: parameter_uncertainties.as_slice().to_vec(),
         error,
-    }
+    })
 }
 
 #[derive(Parser)]
@@ -98,7 +102,7 @@ struct Args {
     print_function_names: bool,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     if args.print_function_names {
         println!(
@@ -122,7 +126,7 @@ fn main() {
     if let (Some(parameters), Some(function)) = (&args.initial_parameters, &args.function)
         && parameters.len() != function.parameter_count()
     {
-        panic!(
+        anyhow::bail!(
             "Got invalid number of initial parameters. \
                 {:?} takes {} parameters, but got {}.",
             function,
@@ -133,21 +137,22 @@ fn main() {
 
     if args.fast {
         let Some(function) = args.function else {
-            panic!("You must specify a function when running program headless!");
+            anyhow::bail!("You must specify a function when running program headless!");
         };
         let result =
-            function.optimizinate(&args.datafile, args.initial_parameters.as_deref(), true);
+            function.optimizinate(&args.datafile, args.initial_parameters.as_deref(), true)?;
 
         println!(
             "Got optimal parameters: {}, which gives an error of {}",
             utils::format_with_uncertainty(&result.parameters, &result.uncertainties),
             utils::g_format(result.error, 5)
         );
+        Ok(())
     } else {
         create_gui(
             &args.datafile,
             args.function,
             args.initial_parameters.as_deref(),
-        );
+        )
     }
 }

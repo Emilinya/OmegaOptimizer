@@ -1,9 +1,7 @@
-use std::{
-    fs::{File, remove_file},
-    io::Write,
-    process::Command,
-};
+use std::{io::Write, process::Command};
 
+use anyhow::Context;
+use fs_err::File;
 use itertools::{Itertools, MinMaxResult, izip};
 use nalgebra::SVector;
 
@@ -16,9 +14,9 @@ pub fn plot_static<const D: usize>(
     optimal_parameters: &SVector<f64, D>,
     uncertainties: &SVector<f64, D>,
     filename: &str,
-) {
+) -> anyhow::Result<()> {
     let datafile = "src/plotting/data.dat";
-    let mut file = File::create(datafile).unwrap();
+    let mut file = File::create(datafile)?;
 
     // save parameters
     writeln!(
@@ -28,28 +26,27 @@ pub fn plot_static<const D: usize>(
             optimal_parameters.data.as_slice(),
             uncertainties.data.as_slice()
         )
-    )
-    .unwrap();
+    )?;
 
     // save input data
-    writeln!(&mut file, "{}\n{}", filename, x_ray.len()).unwrap();
+    writeln!(&mut file, "{}\n{}", filename, x_ray.len())?;
     for (x, y) in izip!(x_ray, y_ray) {
-        writeln!(&mut file, "{} {}", x, y).unwrap();
+        writeln!(&mut file, "{} {}", x, y)?;
     }
 
     // save high quality best fit model
     const N: usize = 1000;
-    writeln!(&mut file, "{}", N).unwrap();
+    writeln!(&mut file, "{}", N)?;
     let (min, max) = match x_ray.iter().minmax() {
         MinMaxResult::MinMax(min, max) => (*min, *max),
-        _ => panic!("x_ray must have more than one item!"),
+        _ => anyhow::bail!("x_ray must have more than one item!"),
     };
     for i in 0..N {
         let x = (i as f64 / (N - 1) as f64) * (max - min) + min;
-        writeln!(&mut file, "{} {}", x, f(x, optimal_parameters)).unwrap();
+        writeln!(&mut file, "{} {}", x, f(x, optimal_parameters))?;
     }
 
-    call_and_remove(datafile);
+    call_and_remove(datafile)
 }
 
 pub fn plot_slice(
@@ -59,9 +56,9 @@ pub fn plot_slice(
     optimal_parameters: &[f64],
     uncertainties: Option<&[f64]>,
     filename: &str,
-) {
+) -> anyhow::Result<()> {
     let datafile = "src/plotting/data.dat";
-    let mut file = File::create(datafile).unwrap();
+    let mut file = File::create(datafile)?;
 
     // save parameters
     if let Some(uncertainties) = uncertainties {
@@ -69,34 +66,33 @@ pub fn plot_slice(
             &mut file,
             "{}",
             format_with_uncertainty(optimal_parameters, uncertainties)
-        )
-        .unwrap();
+        )?;
     } else {
-        writeln!(&mut file, "{}", format_vector(optimal_parameters, 3)).unwrap();
+        writeln!(&mut file, "{}", format_vector(optimal_parameters, 3))?;
     }
 
     // save input data
-    writeln!(&mut file, "{}\n{}", filename, x_ray.len()).unwrap();
+    writeln!(&mut file, "{}\n{}", filename, x_ray.len())?;
     for (x, y) in izip!(x_ray, y_ray) {
-        writeln!(&mut file, "{} {}", x, y).unwrap();
+        writeln!(&mut file, "{} {}", x, y)?;
     }
 
     // save high quality best fit model
     const N: usize = 1000;
-    writeln!(&mut file, "{}", N).unwrap();
+    writeln!(&mut file, "{}", N)?;
     let (min, max) = match x_ray.iter().minmax() {
         MinMaxResult::MinMax(min, max) => (*min, *max),
-        _ => panic!("x_ray must have more than one item!"),
+        _ => anyhow::bail!("x_ray must have more than one item!"),
     };
     for i in 0..N {
         let x = (i as f64 / (N - 1) as f64) * (max - min) + min;
-        writeln!(&mut file, "{} {}", x, f(x, optimal_parameters)).unwrap();
+        writeln!(&mut file, "{} {}", x, f(x, optimal_parameters))?;
     }
 
-    call_and_remove(datafile);
+    call_and_remove(datafile)
 }
 
-fn call_and_remove(datafile: &str) {
+fn call_and_remove(datafile: &str) -> anyhow::Result<()> {
     let mut run_python = {
         if cfg!(target_os = "windows") {
             Command::new("python")
@@ -107,9 +103,9 @@ fn call_and_remove(datafile: &str) {
     run_python
         .arg("src/plotting/plotter.py")
         .spawn()
-        .unwrap()
+        .context("Failed to spawn plotter")?
         .wait()
-        .unwrap();
+        .context("Failed to wait for plotter")?;
 
-    remove_file(datafile).unwrap();
+    Ok(fs_err::remove_file(datafile)?)
 }

@@ -35,8 +35,8 @@ missing_const_for_fn = "allow"
 # Restrict panics
 exit = "warn"
 todo = "warn"
-# panic = "warn"
-# unwrap_used = "warn"
+panic = "warn"
+unwrap_used = "warn"
 unimplemented = "warn"
 panic_in_result_fn = "warn"
 
@@ -50,6 +50,8 @@ egui_plot = "0.34.0"
 eframe = "0.33.0"
 log = "0.4.22"
 pretty_env_logger = "0.5.0"
+anyhow = "1.0.104"
+fs-err = "3.3.1"
 
 [dev-dependencies]
 rand = "0.9.2"

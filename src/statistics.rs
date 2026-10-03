@@ -21,14 +21,14 @@ fn calculate_covariance<const D: usize, F: Differentiated<D>>(
     x_ray: &[f64],
     y_ray: &[f64],
     parameters: &SVector<f64, D>,
-) -> SMatrix<f64, D, D> {
+) -> anyhow::Result<SMatrix<f64, D, D>> {
     let mut outer_sum = SMatrix::<f64, D, D>::zeros();
     for x in x_ray {
         let g = F::grad(*x, parameters);
         outer_sum += outer(&g);
     }
     if outer_sum.iter().any(|v| v.is_nan()) {
-        return SMatrix::<f64, D, D>::from_element(f64::NAN);
+        return Ok(SMatrix::<f64, D, D>::from_element(f64::NAN));
     }
 
     // Why must I use a DMatrix to calculate the pseudo inverse? IDK
@@ -37,21 +37,21 @@ fn calculate_covariance<const D: usize, F: Differentiated<D>>(
     // I use the pseudo inverse instead of the true inverse as I found that in some cases,
     // M * M.inverse() != Identity. I don't know why this is.
     let Ok(outer_inverse_dynamic) = outer_sum_dynamic.pseudo_inverse(1e-18) else {
-        panic!("Sum of outer products is not invertible!");
+        anyhow::bail!("Sum of outer products is not invertible!");
     };
 
     // Back to SMatrix, yay!
     let outer_inverse = SMatrix::from_row_slice(outer_inverse_dynamic.data.as_slice());
 
-    outer_inverse * calculate_variance::<D, F>(x_ray, y_ray, parameters)
+    Ok(outer_inverse * calculate_variance::<D, F>(x_ray, y_ray, parameters))
 }
 
 pub fn get_uncertainties<const D: usize, F: Differentiated<D>>(
     x_ray: &[f64],
     y_ray: &[f64],
     parameters: &SVector<f64, D>,
-) -> SVector<f64, D> {
-    calculate_covariance::<D, F>(x_ray, y_ray, parameters)
+) -> anyhow::Result<SVector<f64, D>> {
+    Ok(calculate_covariance::<D, F>(x_ray, y_ray, parameters)?
         .diagonal()
-        .map(|v| v.sqrt())
+        .map(|v| v.sqrt()))
 }

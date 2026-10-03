@@ -3,19 +3,16 @@ use std::fmt::Write;
 use std::time::Duration;
 use std::{
     cmp::{max, min},
-    fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
 };
 
+use fs_err::File;
 use itertools::izip;
 
 /// Read in x- and y-values from a plaintext data file.
-pub fn load_txt(datafile: &PathBuf) -> Result<(Vec<f64>, Vec<f64>), String> {
-    let file = match File::open(datafile) {
-        Ok(v) => v,
-        Err(e) => return Err(format!("Got error when opening {:?}: {}", datafile, e)),
-    };
+pub fn load_txt(datafile: &PathBuf) -> anyhow::Result<(Vec<f64>, Vec<f64>)> {
+    let file = File::open(datafile)?;
     let reader = BufReader::new(file);
 
     let (mut x_ray, mut y_ray) = (Vec::new(), Vec::new());
@@ -26,14 +23,14 @@ pub fn load_txt(datafile: &PathBuf) -> Result<(Vec<f64>, Vec<f64>), String> {
                 x_ray.push(x);
                 y_ray.push(y);
             } else {
-                return Err(format!("Found non-float values in data list: {}, {}", x, y));
+                anyhow::bail!("Found non-float values in data list: {}, {}", x, y);
             }
         } else {
-            return Err(format!(
+            anyhow::bail!(
                 "Got malformed data: {}. Data rows must \
                 only contain two space-separated values",
                 line,
-            ));
+            );
         }
     }
 

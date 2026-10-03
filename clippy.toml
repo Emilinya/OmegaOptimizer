@@ -1,2 +1,42 @@
 allow-unwrap-in-tests = true
 allow-panic-in-tests = true
+disallowed-types = [
+    # Require using parking_lot for synchronization
+    {path = "std::sync::Mutex", reason = "prefer faster & simpler non-poisonable mutex", replacement = "parking_lot::Mutex"},
+    {path = "std::sync::RwLock", reason = "prefer faster & simpler non-poisonable RwLock", replacement = "parking_lot::RwLock"},
+    {path = "std::sync::Condvar", reason = "prefer faster & simpler non-poisonable condition variable", replacement = "parking_lot::Condvar"},
+    {path = "std::sync::Once", reason = "prefer faster & simpler Once", replacement = "parking_lot::Once"},
+    # Require using fs_err for file IO
+    {path = "std::fs::File", reason = "prefer file type with informative errors", replacement = "fs_err::File"},
+    {path = "std::fs::OpenOptions", reason = "prefer file type with informative errors", replacement = "fs_err::OpenOptions"},
+    {path = "tokio::fs::File", reason = "prefer file type with informative errors", replacement = "fs_err::tokio::File"},
+    {path = "tokio::fs::OpenOptions", reason = "prefer file type with informative errors", replacement = "fs_err::tokio::OpenOptions"},
+]
+disallowed-methods = [
+    # Require using fs_err methods instead of std::fs
+    {path = "std::fs::copy", reason = "prefer file operations with informative errors", replacement = "fs_err::copy"},
+    {path = "std::fs::read", reason = "prefer file operations with informative errors", replacement = "fs_err::read"},
+    {path = "std::fs::write", reason = "prefer file operations with informative errors", replacement = "fs_err::write"},
+    {path = "std::fs::rename", reason = "prefer file operations with informative errors", replacement = "fs_err::rename"},
+    {path = "std::fs::metadata", reason = "prefer file operations with informative errors", replacement = "fs_err::metadata"},
+    {path = "std::fs::read_to_string", reason = "prefer file operations with informative errors", replacement = "fs_err::read_to_string"},
+    {path = "std::fs::read_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::read_dir"},
+    {path = "std::fs::create_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::create_dir"},
+    {path = "std::fs::create_dir_all", reason = "prefer file operations with informative errors", replacement = "fs_err::create_dir_all"},
+    {path = "std::fs::remove_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::remove_dir"},
+    {path = "std::fs::remove_dir_all", reason = "prefer file operations with informative errors", replacement = "fs_err::remove_dir_all"},
+    {path = "std::fs::remove_file", reason = "prefer file operations with informative errors", replacement = "fs_err::remove_file"},
+    # Require using fs_err::tokio methods instead of tokio::fs
+    {path = "tokio::fs::copy", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::copy"},
+    {path = "tokio::fs::read", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::read"},
+    {path = "tokio::fs::write", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::write"},
+    {path = "tokio::fs::rename", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::rename"},
+    {path = "tokio::fs::metadata", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::metadata"},
+    {path = "tokio::fs::read_to_string", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::read_to_string"},
+    {path = "tokio::fs::read_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::read_dir"},
+    {path = "tokio::fs::create_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::create_dir"},
+    {path = "tokio::fs::create_dir_all", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::create_dir_all"},
+    {path = "tokio::fs::remove_dir", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::remove_dir"},
+    {path = "tokio::fs::remove_dir_all", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::remove_dir_all"},
+    {path = "tokio::fs::remove_file", reason = "prefer file operations with informative errors", replacement = "fs_err::tokio::remove_file"},
+]

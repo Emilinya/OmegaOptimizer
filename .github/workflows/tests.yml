@@ -18,9 +18,9 @@ jobs:
     - name: Build
       run: cargo build
     - name: Format
-      run:
-        - VERBOSE=1 make format
-        - git diff --exit-code
+      run: |
+        VERBOSE=1 make format
+        git diff --exit-code
     - name: Lint
       run: VERBOSE=1 make lint CLIPPY_OPTS="-D warnings"
     - name: Run tests

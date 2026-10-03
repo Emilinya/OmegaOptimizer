@@ -1,4 +1,3 @@
-use log::{debug, info};
 use nalgebra::SVector;
 
 use crate::Differentiated;
@@ -32,7 +31,7 @@ fn newton_descent<const D: usize, F: Differentiated<D>>(
     for _ in 0..max_steps {
         let g = function.grad(&x);
         if g.dot(&g).sqrt() < threshold {
-            info!("Newton converged!");
+            log::info!("Newton converged!");
             return (x, MinimizerMessage::Success);
         }
 
@@ -55,7 +54,7 @@ fn newton_descent<const D: usize, F: Differentiated<D>>(
 
             if damping < f64::EPSILON {
                 // Should this be a success?
-                info!("Newton got a damping factor of zero");
+                log::info!("Newton got a damping factor of zero");
                 return (x, MinimizerMessage::Success);
             }
         }
@@ -99,7 +98,7 @@ fn backtrack_descent<const D: usize, F: Differentiated<D>>(
         let g = function.grad(&x);
         let g_norm = g.dot(&g).sqrt();
         if g_norm < threshold {
-            info!("Backtrack converged!");
+            log::info!("Backtrack converged!");
             return (x, MinimizerMessage::Success);
         }
 
@@ -130,7 +129,7 @@ fn backtrack_descent<const D: usize, F: Differentiated<D>>(
 
         if alpha <= f64::EPSILON {
             // Should this be a success?
-            info!("Backtrack got a step size of zero");
+            log::info!("Backtrack got a step size of zero");
             return (x, MinimizerMessage::Success);
         }
 
@@ -154,7 +153,7 @@ pub fn combined_descent<const D: usize, F: Differentiated<D>>(
     let mut best_f = function.f(&best_params);
 
     for step_count in STEP_COUNTS {
-        debug!("Trying {} iterations...", step_count);
+        log::debug!("Trying {} iterations...", step_count);
 
         // try a quick backtrack minimization to find approximate minimum
         let backtrack_out = match backtrack_descent(

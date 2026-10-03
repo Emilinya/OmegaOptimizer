@@ -92,7 +92,7 @@ macro_rules! create_function_enum {
                 datafile: &PathBuf,
                 initial_parameter_opt: Option<&[f64]>,
                 plot_result: bool,
-            ) -> OptimizinateResult {
+            ) -> anyhow::Result<OptimizinateResult> {
                 match self {
                     $(Self::$typename => {
                         let initial_parameters = if let Some(parameters) = initial_parameter_opt {

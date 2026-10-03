@@ -22,7 +22,7 @@ pub fn create_gui(
     datafile: &Path,
     function: Option<Functions>,
     initial_parameters: Option<&[f64]>,
-) {
+) -> anyhow::Result<()> {
     const SCALE: f32 = 1.25;
     const ICON: &[u8; 64 * 64 * 4] = include_bytes!("../media/icon.raw");
 
@@ -48,10 +48,10 @@ pub fn create_gui(
                 datafile_clone,
                 function,
                 initial_parameters,
-            )))
+            )?))
         }),
     )
-    .unwrap();
+    .map_err(|err| anyhow::anyhow!("{}", err))
 }
 
 #[derive(Debug)]
@@ -166,7 +166,13 @@ impl RunThread {
             let mut i = 0;
             let mut previous_error = f64::INFINITY;
             loop {
-                let result = function.optimizinate(&datafile, Some(&parameters), false);
+                let result = match function.optimizinate(&datafile, Some(&parameters), false) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        log::error!("Failed to optimizinate: {:#}", err);
+                        return;
+                    }
+                };
                 let _ = result_tx.send(result.clone());
 
                 i += 1;
@@ -189,8 +195,10 @@ impl RunThread {
 
 impl Drop for RunThread {
     fn drop(&mut self) {
-        if let Some(thread) = self.thread.take() {
-            thread.join().unwrap();
+        if let Some(thread) = self.thread.take()
+            && thread.join().is_err()
+        {
+            log::warn!("Failed to join RunThread");
         }
     }
 }
@@ -210,12 +218,12 @@ impl MyApp {
         datafile: PathBuf,
         function: Option<Functions>,
         initial_parameters: Option<&[f64]>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let function = function.unwrap_or(Functions::Line);
         let parameter_store_map = ParameterStoreMap::new(function, initial_parameters);
 
-        let (x_ray, y_ray) = load_txt(&datafile).unwrap();
-        Self {
+        let (x_ray, y_ray) = load_txt(&datafile)?;
+        Ok(Self {
             x_ray,
             y_ray,
             message: Message::None,
@@ -223,7 +231,7 @@ impl MyApp {
             function,
             run_thread: None,
             parameter_store_map,
-        }
+        })
     }
 
     fn run(&mut self) -> Message {
@@ -273,30 +281,36 @@ impl MyApp {
     fn save_figure(&self) -> Message {
         let parameter_store = self.parameter_store_map.get(self.function);
         if let Some(parameters) = parameter_store.get_parameters() {
-            let data_name = self.datafile.file_stem().unwrap().to_string_lossy();
+            let Some(file_stem) = self.datafile.file_stem() else {
+                return Message::Error("Datafile has no file stem".into());
+            };
+
+            let data_name = file_stem.to_string_lossy();
             let figure_name = format!("figures/{}-{}.png", data_name, self.function.name());
-            plot_slice(
+            match plot_slice(
                 &self.x_ray,
                 &self.y_ray,
                 |x, p| self.function.f(x, p),
                 &parameters,
                 parameter_store.uncertainties.as_deref(),
                 &figure_name,
-            );
-            Message::Ok(format!("Saved figure '{}'", figure_name))
+            ) {
+                Ok(()) => Message::Ok(format!("Saved figure '{}'", figure_name)),
+                Err(err) => Message::Error(format!("Failed to save figure: {:#}", err)),
+            }
         } else {
             Message::Error("Some parameters are malformed.".into())
         }
     }
 
-    fn show_figure(&self, ui: &mut Ui) {
+    fn show_figure(&self, ui: &mut Ui) -> anyhow::Result<()> {
         let parameter_store = self.parameter_store_map.get(self.function);
         let data: PlotPoints = izip!(&self.x_ray, &self.y_ray)
             .map(|(x, y)| [*x, *y])
             .collect();
-        let data_points = Points::new("Data", data)
-            .radius(4.0f32)
-            .color(Color32::from_hex("#1f77b4").unwrap());
+        let data_points = Points::new("Data", data).radius(4.0f32).color(
+            Color32::from_hex("#1f77b4").map_err(|_| anyhow::anyhow!("#1f77b4 is invalid hex?"))?,
+        );
 
         let line = if parameter_store.values.iter().all(Option::is_some) {
             let params: Vec<f64> = parameter_store.values.iter().filter_map(|v| *v).collect();
@@ -304,7 +318,7 @@ impl MyApp {
             const N: usize = 1000;
             let (min, max) = match self.x_ray.iter().minmax() {
                 MinMaxResult::MinMax(min, max) => (*min, *max),
-                _ => panic!("x_ray must have more than one item!"),
+                _ => anyhow::bail!("x_ray must have more than one item!"),
             };
             let function: PlotPoints = (0..N)
                 .map(|i| {
@@ -312,7 +326,12 @@ impl MyApp {
                     [x, self.function.f(x, &params)]
                 })
                 .collect();
-            Some(Line::new("Function", function).color(Color32::from_hex("#ff7f0e").unwrap()))
+            Some(
+                Line::new("Function", function).color(
+                    Color32::from_hex("#ff7f0e")
+                        .map_err(|_| anyhow::anyhow!("#ff7f0e is invalid hex?"))?,
+                ),
+            )
         } else {
             None
         };
@@ -323,6 +342,7 @@ impl MyApp {
                 plot_ui.line(line);
             }
         });
+        Ok(())
     }
 }
 
@@ -415,7 +435,9 @@ impl eframe::App for MyApp {
             ui.add_space(2.0);
 
             // Data figure
-            self.show_figure(ui);
+            if let Err(err) = self.show_figure(ui) {
+                self.message = Message::Error(format!("Failed to show figure: {}", err));
+            }
         });
 
         // normally, the GUI only updates when necessary, but when we have a run thread,
