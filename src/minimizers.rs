@@ -1,8 +1,8 @@
 use log::{debug, info};
 use nalgebra::SVector;
 
-use crate::error_functions::ErrorFunction;
 use crate::Differentiated;
+use crate::error_functions::ErrorFunction;
 
 pub enum MinimizerMessage {
     Success,
@@ -168,7 +168,7 @@ pub fn combined_descent<const D: usize, F: Differentiated<D>>(
                 return (
                     best_params,
                     MinimizerMessage::Error("Backtrack can't improve"),
-                )
+                );
             }
         };
         let f_backtrack = function.f(&backtrack_out);
@@ -185,7 +185,7 @@ pub fn combined_descent<const D: usize, F: Differentiated<D>>(
             match newton_message {
                 MinimizerMessage::Success => return (newton_out, MinimizerMessage::Success),
                 MinimizerMessage::TimedOut => {
-                    return newton_descent(&newton_out, function, MAX_STEPS)
+                    return newton_descent(&newton_out, function, MAX_STEPS);
                 }
                 _ => {
                     best_params = newton_out;

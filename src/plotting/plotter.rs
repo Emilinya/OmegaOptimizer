@@ -1,10 +1,10 @@
 use std::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::Write,
     process::Command,
 };
 
-use itertools::{izip, Itertools, MinMaxResult};
+use itertools::{Itertools, MinMaxResult, izip};
 use nalgebra::SVector;
 
 use crate::utils::{format_vector, format_with_uncertainty};

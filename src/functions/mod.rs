@@ -153,7 +153,7 @@ mod tests {
 
     fn test_derivative(mode: Mode) {
         let mut rng = StdRng::seed_from_u64(80085);
-        let uniform = Uniform::new(0.0, 1.0);
+        let uniform = Uniform::new(0.0, 1.0).unwrap();
 
         let mut should_panic = false;
         for name in Functions::VARIANTS {
