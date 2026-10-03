@@ -72,16 +72,16 @@ if num_params == 1:
         min_vals[0] - ranges[0] * 0.5, max_vals[0] + ranges[0] * 0.5, 100
     )
     err_ray = np.array([err([a]) for a in a_ray])
-    plt.plot(a_ray, np.log(err_ray))
+    plt.plot(a_ray, np.log10(err_ray))
     for color, (name, path_ray) in zip(colors[1:], descents):
         path = path_ray.T[0]
-        errors = [np.log(err([a])) for a in path]
+        errors = [np.log10(err([a])) for a in path]
         plt.plot(path, errors, ".", color=color, markersize=2, zorder=9)
         plt.plot(path, errors, color=color, label=name, zorder=9)
 
     plt.legend()
     plt.xlabel(f"${sp.pretty(sym_params[0])}$")
-    plt.ylabel(f"$\\ln(E({pretty_params}))$")
+    plt.ylabel(f"$\\log(E({pretty_params}))$")
     plt.title(title)
     plt.tight_layout()
     plt.savefig(f"{fig_folder}/{prefix}_descent_path.png", dpi=200)
@@ -98,9 +98,9 @@ elif num_params == 2:
     for i, params in enumerate(zip(a_grid.flat, b_grid.flat)):
         z_grid.flat[i] = err(params)
 
-    plt.contourf(a_grid, b_grid, np.log(z_grid), cmap="plasma", levels=75)
+    plt.contourf(a_grid, b_grid, np.log10(z_grid), cmap="plasma", levels=75)
     plt.colorbar(
-        label=f"$\\ln(E({sp.latex(sym_params[0])}, {sp.latex(sym_params[1])}))$"
+        label=f"$\\log(E({sp.latex(sym_params[0])}, {sp.latex(sym_params[1])}))$"
     )
     for color, (name, path_ray) in zip(colors, descents):
         plt.plot(*path_ray.T, ".", color=color, markersize=2, zorder=9)
@@ -116,7 +116,7 @@ elif num_params == 3:
     pass
 
 i = 0
-log_errors = [[np.log(err(params)) for params in path_ray] for _, path_ray in descents]
+log_errors = [[np.log10(err(params)) for params in path_ray] for _, path_ray in descents]
 for (name, path_ray), log_error in zip(descents, log_errors):
     index_range = range(i, i + len(path_ray))
     plt.plot(index_range, log_error, label=name, zorder=9)
@@ -124,7 +124,7 @@ for (name, path_ray), log_error in zip(descents, log_errors):
     i += len(path_ray) - 1
 plt.legend()
 plt.xlabel("step count")
-plt.ylabel(f"$\\ln(E({pretty_params}))$")
+plt.ylabel(f"$\\log(E({pretty_params}))$")
 plt.title(title)
 plt.tight_layout()
 plt.savefig(f"{fig_folder}/{prefix}_error_decrease.png", dpi=200)

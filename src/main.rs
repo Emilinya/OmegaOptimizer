@@ -46,10 +46,11 @@ fn plot(
     y_ray: &Array1<f64>,
     f: fn(f64, &Array1<f64>) -> f64,
     amin: &Array1<f64>,
-    filename: &str,
+    img_folder: &str,
+    img_prefix: &str,
 ) {
     let mut file = File::create("plotting/data.dat").unwrap();
-    writeln!(&mut file, "{}", filename).unwrap();
+    writeln!(&mut file, "{}/{}_result.png", img_folder, img_prefix).unwrap();
     for (x, y) in izip!(x_ray, y_ray) {
         writeln!(&mut file, "{} {} {}", x, y, f(*x, amin)).unwrap();
     }
@@ -230,5 +231,5 @@ fn main() {
 
     println!("Plotting ...");
     plot_path(datafile, descent_path_file, "figures", name);
-    plot(&x_ray, &y_ray, f, &optimal_params, "figures/result.png");
+    plot(&x_ray, &y_ray, f, &optimal_params, "figures", name);
 }
