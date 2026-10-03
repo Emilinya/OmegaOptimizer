@@ -347,8 +347,10 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {}
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ui, |ui| {
             // Function combo box
             egui::ComboBox::from_label("Select a function")
                 .selected_text(format!("{:?}", self.function))
@@ -443,7 +445,7 @@ impl eframe::App for MyApp {
         // normally, the GUI only updates when necessary, but when we have a run thread,
         // we want to read from it every once in a while.
         if self.run_thread.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(100));
+            ui.request_repaint_after(Duration::from_millis(100));
         }
     }
 }
