@@ -36,7 +36,7 @@ fn calculate_covariance<const D: usize, F: Differentiated<D>>(
 
     // I use the pseudo inverse instead of the true inverse as I found that in some cases,
     // M * M.inverse() != Identity. I don't know why this is.
-    let Ok(outer_inverse_dynamic) = outer_sum_dynamic.clone().pseudo_inverse(1e-18) else {
+    let Ok(outer_inverse_dynamic) = outer_sum_dynamic.pseudo_inverse(1e-18) else {
         panic!("Sum of outer products is not invertible!");
     };
 

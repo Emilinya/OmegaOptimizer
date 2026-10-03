@@ -31,7 +31,7 @@ format:
 .PHONY: lint
 lint:
 	@echo "Linting"
-	$(SILENCE)cargo clippy $(CARGO_OPTS) --quiet -- $(CLIPPY_OPTS)
+	$(SILENCE)cargo clippy --all-targets $(CARGO_OPTS) --quiet -- $(CLIPPY_OPTS)
 
 .PHONY: check
 check:

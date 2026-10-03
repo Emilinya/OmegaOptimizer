@@ -8,6 +8,7 @@ impl Differentiated<4> for MortFunc {
     const PARAMETER_NAMES: [&'static str; 4] = ["a", "b", "c", "n"];
     const NAME: &'static str = "mort_func";
 
+    #[allow(clippy::many_single_char_names)]
     fn f(x: f64, params: &Vector4<f64>) -> f64 {
         let (a, b, c, n) = (params.x, params.y, params.z, params.w);
         a * x.powf(n) / (b * x.powf(n) + 1.0) + c

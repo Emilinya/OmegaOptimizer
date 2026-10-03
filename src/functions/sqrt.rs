@@ -8,6 +8,7 @@ impl Differentiated<4> for Sqrt {
     const PARAMETER_NAMES: [&'static str; 4] = ["a", "b", "c", "d"];
     const NAME: &'static str = "sqrt";
 
+    #[allow(clippy::many_single_char_names)]
     fn f(x: f64, params: &Vector4<f64>) -> f64 {
         let (a, b, c, d) = (params.x, params.y, params.z, params.w);
         a * (b * x + c).abs().sqrt() + d

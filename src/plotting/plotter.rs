@@ -57,7 +57,7 @@ pub fn plot_slice(
     y_ray: &[f64],
     f: impl Fn(f64, &[f64]) -> f64,
     optimal_parameters: &[f64],
-    uncertainties: &Option<Vec<f64>>,
+    uncertainties: Option<&[f64]>,
     filename: &str,
 ) {
     let datafile = "src/plotting/data.dat";

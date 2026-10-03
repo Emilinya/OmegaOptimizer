@@ -1,4 +1,5 @@
 use core::fmt;
+use std::fmt::Write;
 use std::time::Duration;
 use std::{
     cmp::{max, min},
@@ -75,8 +76,8 @@ pub fn format_vector(vector: &[f64], sigdig: usize) -> String {
 
 pub fn prettify_list<T: fmt::Display>(list: &[T]) -> String {
     let mut pretty_list = String::new();
-    for (i, string) in list.iter().enumerate() {
-        pretty_list += &format!("'{}'", string);
+    for (i, value) in list.iter().enumerate() {
+        let _ = write!(&mut pretty_list, "'{}'", value);
         match i {
             i if i < list.len() - 2 => pretty_list += ", ",
             i if i == list.len() - 2 => pretty_list += " and ",
@@ -98,7 +99,8 @@ pub fn format_with_uncertainty(values: &[f64], uncertainties: &[f64]) -> String 
         let v_digits = v.abs().log10().ceil() as i64;
         let extra_digits = max(v_digits - e_digits, 0) as usize;
 
-        output_string += &format!(
+        let _ = write!(
+            &mut output_string,
             "{}±{}",
             g_format(*v, UNCERTAINTY_SIGDIG + extra_digits),
             g_format(*e, UNCERTAINTY_SIGDIG)
@@ -116,11 +118,11 @@ mod tests {
 
     #[test]
     fn test_g_format() {
-        assert_eq!(g_format(1426837.0, 4), "1.427e6");
-        assert_eq!(g_format(49.279863, 5), "49.280");
-        assert_eq!(g_format(2.675289, 3), "2.68");
+        assert_eq!(g_format(1_426_837.0, 4), "1.427e6");
+        assert_eq!(g_format(49.279_863, 5), "49.280");
+        assert_eq!(g_format(2.675_289, 3), "2.68");
         assert_eq!(g_format(0.4678, 1), "0.5");
-        assert_eq!(g_format(0.0000324, 3), "3.24e-5");
+        assert_eq!(g_format(0.000_032_4, 3), "3.24e-5");
     }
 
     #[test]
@@ -128,14 +130,14 @@ mod tests {
         let duration = Duration::from_secs_f64(13.12736);
         assert_eq!(format_duration(duration), "13.127 s");
 
-        let duration = Duration::from_secs_f64(0.0723847184);
+        let duration = Duration::from_secs_f64(0.072_384_718_4);
         assert_eq!(format_duration(duration), "72.385 ms");
     }
 
     #[test]
     fn test_format_vector() {
         let vector = vec![2.13, 9.81, 0.012];
-        assert_eq!(format_vector(&vector, 2), "[2.1, 9.8, 0.012]")
+        assert_eq!(format_vector(&vector, 2), "[2.1, 9.8, 0.012]");
     }
 
     #[test]

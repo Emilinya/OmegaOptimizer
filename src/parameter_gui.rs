@@ -21,7 +21,7 @@ use crate::{OptimizinateResult, error_functions::error};
 pub fn create_gui(
     datafile: &Path,
     function: Option<Functions>,
-    initial_parameters: Option<Vec<f64>>,
+    initial_parameters: Option<&[f64]>,
 ) {
     const SCALE: f32 = 1.25;
     const ICON: &[u8; 64 * 64 * 4] = include_bytes!("../media/icon.raw");
@@ -86,11 +86,9 @@ impl ParameterStore {
         (strings, values)
     }
 
-    fn new(function: &Functions, values: &Option<Vec<f64>>) -> Self {
+    fn new(function: Functions, values: Option<Vec<f64>>) -> Self {
         let count = function.parameter_count();
-        let values = values
-            .clone()
-            .unwrap_or_else(|| repeat_n(1.0, count).collect());
+        let values = values.unwrap_or_else(|| repeat_n(1.0, count).collect());
 
         let names = function.parameter_names();
         let (strings, values) = Self::slice_to_values(&values);
@@ -128,27 +126,29 @@ struct ParameterStoreMap {
 }
 
 impl ParameterStoreMap {
-    fn new(function: &Functions, initial_parameters: Option<Vec<f64>>) -> Self {
+    fn new(function: Functions, initial_parameters: Option<&[f64]>) -> Self {
         let map = HashMap::from_iter(Functions::iter().map(|f| {
-            let store = if f == *function && initial_parameters.is_some() {
-                ParameterStore::new(&f, &initial_parameters)
+            let store = if f == function
+                && let Some(parameters) = initial_parameters
+            {
+                ParameterStore::new(f, Some(parameters.to_vec()))
             } else {
-                ParameterStore::new(&f, &None)
+                ParameterStore::new(f, None)
             };
             (f, store)
         }));
         Self { map }
     }
 
-    fn get(&self, function: &Functions) -> &ParameterStore {
+    fn get(&self, function: Functions) -> &ParameterStore {
         self.map
-            .get(function)
+            .get(&function)
             .expect("map should contain parameters for all functions")
     }
 
-    fn get_mut(&mut self, function: &Functions) -> &mut ParameterStore {
+    fn get_mut(&mut self, function: Functions) -> &mut ParameterStore {
         self.map
-            .get_mut(function)
+            .get_mut(&function)
             .expect("map should contain parameters for all functions")
     }
 }
@@ -209,10 +209,10 @@ impl MyApp {
     fn new(
         datafile: PathBuf,
         function: Option<Functions>,
-        initial_parameters: Option<Vec<f64>>,
+        initial_parameters: Option<&[f64]>,
     ) -> Self {
         let function = function.unwrap_or(Functions::Line);
-        let parameter_store_map = ParameterStoreMap::new(&function, initial_parameters);
+        let parameter_store_map = ParameterStoreMap::new(function, initial_parameters);
 
         let (x_ray, y_ray) = load_txt(&datafile).unwrap();
         Self {
@@ -227,7 +227,7 @@ impl MyApp {
     }
 
     fn run(&mut self) -> Message {
-        let parameter_store = self.parameter_store_map.get_mut(&self.function);
+        let parameter_store = self.parameter_store_map.get_mut(self.function);
         if let Some(parameters) = parameter_store.get_parameters() {
             self.run_thread = Some(RunThread::start(
                 self.function,
@@ -259,7 +259,7 @@ impl MyApp {
             let result = result?;
 
             self.parameter_store_map
-                .get_mut(&self.function)
+                .get_mut(self.function)
                 .update_values(&result.parameters, &result.uncertainties);
             Some(Message::Ok(format!(
                 "Got parameters {}",
@@ -271,7 +271,7 @@ impl MyApp {
     }
 
     fn save_figure(&self) -> Message {
-        let parameter_store = self.parameter_store_map.get(&self.function);
+        let parameter_store = self.parameter_store_map.get(self.function);
         if let Some(parameters) = parameter_store.get_parameters() {
             let data_name = self.datafile.file_stem().unwrap().to_string_lossy();
             let figure_name = format!("figures/{}-{}.png", data_name, self.function.name());
@@ -280,7 +280,7 @@ impl MyApp {
                 &self.y_ray,
                 |x, p| self.function.f(x, p),
                 &parameters,
-                &parameter_store.uncertainties,
+                parameter_store.uncertainties.as_deref(),
                 &figure_name,
             );
             Message::Ok(format!("Saved figure '{}'", figure_name))
@@ -290,7 +290,7 @@ impl MyApp {
     }
 
     fn show_figure(&self, ui: &mut Ui) {
-        let parameter_store = self.parameter_store_map.get(&self.function);
+        let parameter_store = self.parameter_store_map.get(self.function);
         let data: PlotPoints = izip!(&self.x_ray, &self.y_ray)
             .map(|(x, y)| [*x, *y])
             .collect();
@@ -348,7 +348,7 @@ impl eframe::App for MyApp {
 
             // Parameter selection boxes
             ui.vertical(|ui| {
-                let parameter_store = self.parameter_store_map.get_mut(&self.function);
+                let parameter_store = self.parameter_store_map.get_mut(self.function);
                 for (i, parameter) in parameter_store.names.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{}: ", parameter));
@@ -381,7 +381,7 @@ impl eframe::App for MyApp {
                 }
                 ui.add_space(5.0);
                 if ui.button("Reset").clicked() {
-                    self.parameter_store_map.get_mut(&self.function).reset();
+                    self.parameter_store_map.get_mut(self.function).reset();
                 }
                 ui.add_space(5.0);
                 if ui.button("Save Figure").clicked() {
@@ -400,14 +400,12 @@ impl eframe::App for MyApp {
             ui.add_space(10.0);
 
             // Approximation error
-            let error = if let Some(parameters) = self
-                .parameter_store_map
-                .get(&self.function)
-                .get_parameters()
+            let error = if let Some(parameters) =
+                self.parameter_store_map.get(self.function).get_parameters()
             {
                 format!(
                     "{}",
-                    error(&self.x_ray, &self.y_ray, &self.function, &parameters)
+                    error(&self.x_ray, &self.y_ray, self.function, &parameters)
                 )
             } else {
                 "NaN".into()

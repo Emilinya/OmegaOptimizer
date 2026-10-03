@@ -53,7 +53,7 @@ impl<const D: usize, F: Differentiated<D>> ErrorFunction<D, F> {
     }
 }
 
-pub fn error(x_ray: &[f64], y_ray: &[f64], function: &Functions, parameters: &[f64]) -> f64 {
+pub fn error(x_ray: &[f64], y_ray: &[f64], function: Functions, parameters: &[f64]) -> f64 {
     let mut sum = 0.0;
     for (x, y) in izip!(x_ray.iter(), y_ray.iter()) {
         sum += (y - function.f(*x, parameters)).powi(2);

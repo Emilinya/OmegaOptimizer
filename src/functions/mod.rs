@@ -142,15 +142,15 @@ mod tests {
 
     #[test]
     fn test_gradients() {
-        test_derivative(Mode::Gradient);
+        test_derivative(&Mode::Gradient);
     }
 
     #[test]
     fn test_hessians() {
-        test_derivative(Mode::Hessian);
+        test_derivative(&Mode::Hessian);
     }
 
-    fn test_derivative(mode: Mode) {
+    fn test_derivative(mode: &Mode) {
         let mut rng = StdRng::seed_from_u64(80085);
         let uniform = Uniform::new(0.0, 1.0).unwrap();
 
@@ -179,19 +179,16 @@ mod tests {
                 Mode::Gradient => 1.0,
                 Mode::Hessian => 0.5,
             };
-            let h_values: Vec<f64> = (2..=6).map(|i| 10_f64.powf(-i as f64 * hf)).collect();
+            let h_values: Vec<f64> = (2..=6).map(|i| 10_f64.powf(f64::from(-i) * hf)).collect();
 
             let mut error_values = Vec::<ModeContainer>::with_capacity(h_values.len());
-            for h in h_values.iter() {
+            for h in &h_values {
                 let numeric_derivative = match mode {
-                    Mode::Gradient => ModeContainer::Gradient(get_numeric_gradient(
-                        &function,
-                        x,
-                        &true_params,
-                        *h,
-                    )),
+                    Mode::Gradient => {
+                        ModeContainer::Gradient(get_numeric_gradient(function, x, &true_params, *h))
+                    }
                     Mode::Hessian => {
-                        ModeContainer::Hessian(get_numeric_hessian(&function, x, &true_params, *h))
+                        ModeContainer::Hessian(get_numeric_hessian(function, x, &true_params, *h))
                     }
                 };
 
@@ -235,12 +232,14 @@ mod tests {
                 should_panic = true;
             }
         }
-        if should_panic {
-            panic!("Some {}s are implemented incorrectly!", mode.name());
-        }
+        assert!(
+            !should_panic,
+            "Some {}s are implemented incorrectly!",
+            mode.name()
+        );
     }
 
-    fn get_numeric_gradient(function: &Functions, x: f64, params: &[f64], h: f64) -> DVector<f64> {
+    fn get_numeric_gradient(function: Functions, x: f64, params: &[f64], h: f64) -> DVector<f64> {
         let f = function.f(x, params);
         let size = params.len();
 
@@ -257,7 +256,7 @@ mod tests {
         numeric_gradient
     }
 
-    fn get_numeric_hessian(function: &Functions, x: f64, params: &[f64], h: f64) -> DMatrix<f64> {
+    fn get_numeric_hessian(function: Functions, x: f64, params: &[f64], h: f64) -> DMatrix<f64> {
         let f = function.f(x, params);
         let size = params.len();
 
@@ -319,8 +318,8 @@ mod tests {
     impl Mode {
         fn to_index_str(&self, i: usize, size: usize) -> String {
             match self {
-                Mode::Gradient => format!("{}", i),
-                Mode::Hessian => {
+                Self::Gradient => format!("{}", i),
+                Self::Hessian => {
                     let (yi, xi) = (i / size, i % size);
                     format!("({}, {})", xi, yi)
                 }
@@ -329,8 +328,8 @@ mod tests {
 
         fn name(&self) -> String {
             match self {
-                Mode::Gradient => "gradient",
-                Mode::Hessian => "hessian",
+                Self::Gradient => "gradient",
+                Self::Hessian => "hessian",
             }
             .into()
         }
@@ -342,7 +341,7 @@ mod tests {
     }
 
     impl Sub<&Self> for ModeContainer {
-        type Output = ModeContainer;
+        type Output = Self;
 
         fn sub(self, rhs: &Self) -> Self::Output {
             match self {
@@ -372,8 +371,8 @@ mod tests {
     impl ModeContainer {
         fn abs(self) -> Self {
             match self {
-                ModeContainer::Gradient(v) => ModeContainer::Gradient(v.abs()),
-                ModeContainer::Hessian(v) => ModeContainer::Hessian(v.abs()),
+                Self::Gradient(v) => Self::Gradient(v.abs()),
+                Self::Hessian(v) => Self::Hessian(v.abs()),
             }
         }
     }

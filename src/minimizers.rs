@@ -188,7 +188,7 @@ pub fn combined_descent<const D: usize, F: Differentiated<D>>(
                 MinimizerMessage::TimedOut => {
                     return newton_descent(&newton_out, function, MAX_STEPS);
                 }
-                _ => {
+                MinimizerMessage::Error(_) => {
                     best_params = newton_out;
                     best_f = function.f(&newton_out);
                     continue;
@@ -216,20 +216,20 @@ mod tests {
 
     #[test]
     fn test_newton_descent() {
-        test_minimizer(Mode::Newton);
+        test_minimizer(&Mode::Newton);
     }
 
     #[test]
     fn test_backtrack_descent() {
-        test_minimizer(Mode::Backtrack);
+        test_minimizer(&Mode::Backtrack);
     }
 
     #[test]
     fn test_combined_descent() {
-        test_minimizer(Mode::Combined);
+        test_minimizer(&Mode::Combined);
     }
 
-    fn test_minimizer(mode: Mode) {
+    fn test_minimizer(mode: &Mode) {
         let parameters = Vector2::new(E, PI);
 
         // Create data with no noise, as we then should get 'parameters' exactly.
@@ -256,7 +256,7 @@ mod tests {
             let error = match message {
                 MinimizerMessage::TimedOut => "Timed out",
                 MinimizerMessage::Error(s) => s,
-                _ => "???",
+                MinimizerMessage::Success => "???",
             };
             panic!("{:?} got error: {:?}", mode, error);
         };
@@ -267,14 +267,13 @@ mod tests {
             Mode::Combined => 0.0,
         };
 
-        if (optimal_parameters - parameters).abs().max() > threshold {
-            panic!(
-                "{:?} got wrong parameters! {:?} > {}",
-                mode,
-                (optimal_parameters - parameters).abs(),
-                threshold,
-            );
-        }
+        assert!(
+            (optimal_parameters - parameters).abs().max() <= threshold,
+            "{:?} got wrong parameters! {:?} > {}",
+            mode,
+            (optimal_parameters - parameters).abs(),
+            threshold,
+        );
     }
 
     #[derive(Debug)]

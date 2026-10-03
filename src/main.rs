@@ -131,9 +131,7 @@ fn main() {
         );
     }
 
-    if !args.fast {
-        create_gui(&args.datafile, args.function, args.initial_parameters);
-    } else {
+    if args.fast {
         let Some(function) = args.function else {
             panic!("You must specify a function when running program headless!");
         };
@@ -144,6 +142,12 @@ fn main() {
             "Got optimal parameters: {}, which gives an error of {}",
             utils::format_with_uncertainty(&result.parameters, &result.uncertainties),
             utils::g_format(result.error, 5)
+        );
+    } else {
+        create_gui(
+            &args.datafile,
+            args.function,
+            args.initial_parameters.as_deref(),
         );
     }
 }
