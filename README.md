@@ -1,3 +1,6 @@
+[![GNU GPLv3 License](https://img.shields.io/github/license/Emilinya/OmegaOptimizer)](https://choosealicense.com/licenses/gpl-3.0/)
+[![Test TopOpt](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml/badge.svg?style=plastic)](https://github.com/Emilinya/OmegaOptimizer/actions/workflows/tests.yml)
+
 # Omega Optimizer
 
 *Omega Optimizer* is a program that finds the parameters such that a parametrized function best matches some data. It uses a gui where you can see your data, choose from several parameterized functions, run the optimizer, and save the result as a figure. I have written a blog post on how this program works, which you can read on [my website](http://blog.emilie.moe/omega_optimizer/).
