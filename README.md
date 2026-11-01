@@ -11,7 +11,7 @@
 
 ## Usage
 
-The program is run using `cargo run --release -- <datafile>`, where `<datafile>` is the path to a plain text file with x-values in the first column and y-values in the second column, with the values separated by a space. The program can also be ran without the gui using the `-f` flag. In this case, you must also provide a function. To print a list of available functions, use the `-p` flag. For more options, see the `-h` flag.
+The program built using `RELEASE=1 make build` and run using `./omega_optimizer`. The program can also be ran without the gui using the `--headless` flag. In this case, you must also provide a datafile and a function. To print a list of available functions, use the `-p` flag. For more options, see the `-h` flag.
 
 ## Adding a new function
 

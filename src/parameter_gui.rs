@@ -1,3 +1,4 @@
+use anyhow::Context;
 use eframe::egui::{self, Ui};
 use egui::{Color32, Widget};
 use egui_plot::{Line, Plot, PlotPoints, Points};
@@ -19,7 +20,7 @@ use crate::utils::{format_with_uncertainty, load_txt};
 use crate::{OptimizinateResult, error_functions::error};
 
 pub fn create_gui(
-    datafile: &Path,
+    datafile: Option<PathBuf>,
     function: Option<Functions>,
     initial_parameters: Option<&[f64]>,
 ) -> anyhow::Result<()> {
@@ -37,15 +38,13 @@ pub fn create_gui(
         ..Default::default()
     };
 
-    let datafile_clone = datafile.to_path_buf();
-
     eframe::run_native(
         "Omega Optimizer",
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_zoom_factor(SCALE);
             Ok(Box::new(MyApp::new(
-                datafile_clone,
+                datafile,
                 function,
                 initial_parameters,
             )?))
@@ -151,6 +150,12 @@ impl ParameterStoreMap {
             .get_mut(&function)
             .expect("map should contain parameters for all functions")
     }
+
+    fn reset(&mut self) {
+        for patameter_store in self.map.values_mut() {
+            patameter_store.reset();
+        }
+    }
 }
 
 struct RunThread {
@@ -159,9 +164,10 @@ struct RunThread {
 }
 
 impl RunThread {
-    fn start(function: Functions, datafile: PathBuf, mut parameters: Vec<f64>) -> Self {
+    fn start(function: Functions, datafile: &Path, mut parameters: Vec<f64>) -> Self {
         let (result_tx, result_rx) = mpsc::channel();
 
+        let datafile = datafile.to_owned();
         let thread = thread::spawn(move || {
             let mut i = 0;
             let mut previous_error = f64::INFINITY;
@@ -203,11 +209,27 @@ impl Drop for RunThread {
     }
 }
 
-struct MyApp {
-    x_ray: Vec<f64>,
-    y_ray: Vec<f64>,
-    message: Message,
+struct Data {
     datafile: PathBuf,
+    x_ray: Box<[f64]>,
+    y_ray: Box<[f64]>,
+}
+
+impl Data {
+    fn new(datafile: PathBuf) -> anyhow::Result<Self> {
+        let (x_ray, y_ray) = load_txt(&datafile)
+            .with_context(|| format!("Failed to read {}", datafile.display()))?;
+        Ok(Self {
+            datafile,
+            x_ray: x_ray.into(),
+            y_ray: y_ray.into(),
+        })
+    }
+}
+
+struct MyApp {
+    data: Option<Data>,
+    message: Message,
     function: Functions,
     run_thread: Option<RunThread>,
     parameter_store_map: ParameterStoreMap,
@@ -215,59 +237,61 @@ struct MyApp {
 
 impl MyApp {
     fn new(
-        datafile: PathBuf,
+        datafile: Option<PathBuf>,
         function: Option<Functions>,
         initial_parameters: Option<&[f64]>,
     ) -> anyhow::Result<Self> {
         let function = function.unwrap_or(Functions::Line);
         let parameter_store_map = ParameterStoreMap::new(function, initial_parameters);
 
-        let (x_ray, y_ray) = load_txt(&datafile)?;
+        let data = datafile.map(Data::new).transpose()?;
         Ok(Self {
-            x_ray,
-            y_ray,
+            data,
             message: Message::None,
-            datafile,
             function,
             run_thread: None,
             parameter_store_map,
         })
     }
 
-    fn run(&mut self) -> Message {
-        let parameter_store = self.parameter_store_map.get_mut(self.function);
+    fn run(
+        data: &Data,
+        function: Functions,
+        run_thread: &mut Option<RunThread>,
+        parameter_store: &ParameterStore,
+    ) -> Message {
         if let Some(parameters) = parameter_store.get_parameters() {
-            self.run_thread = Some(RunThread::start(
-                self.function,
-                self.datafile.clone(),
-                parameters,
-            ));
+            *run_thread = Some(RunThread::start(function, &data.datafile, parameters));
             Message::None
         } else {
             Message::Error("Some parameters are malformed.".into())
         }
     }
 
-    fn read_run_thread(&mut self) -> Option<Message> {
-        if let Some(run_thread) = &self.run_thread {
+    fn read_run_thread(
+        function: Functions,
+        run_thread: &mut Option<RunThread>,
+        parameter_store_map: &mut ParameterStoreMap,
+    ) -> Option<Message> {
+        if let Some(thread) = run_thread {
             // read messages in a loop to ensure we use the latest message
             let mut result = None;
             loop {
-                match run_thread.receiver.try_recv() {
+                match thread.receiver.try_recv() {
                     Ok(message) => {
                         result = Some(message);
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        self.run_thread = None;
+                        *run_thread = None;
                         break;
                     }
                 }
             }
             let result = result?;
 
-            self.parameter_store_map
-                .get_mut(self.function)
+            parameter_store_map
+                .get_mut(function)
                 .update_values(&result.parameters, &result.uncertainties);
             Some(Message::Ok(format!(
                 "Got parameters {}",
@@ -278,19 +302,18 @@ impl MyApp {
         }
     }
 
-    fn save_figure(&self) -> Message {
-        let parameter_store = self.parameter_store_map.get(self.function);
+    fn save_figure(data: &Data, function: Functions, parameter_store: &ParameterStore) -> Message {
         if let Some(parameters) = parameter_store.get_parameters() {
-            let Some(file_stem) = self.datafile.file_stem() else {
+            let Some(file_stem) = data.datafile.file_stem() else {
                 return Message::Error("Datafile has no file stem".into());
             };
 
             let data_name = file_stem.to_string_lossy();
-            let figure_name = format!("figures/{}-{}.png", data_name, self.function.name());
+            let figure_name = format!("figures/{}-{}.png", data_name, function.name());
             match plot_slice(
-                &self.x_ray,
-                &self.y_ray,
-                |x, p| self.function.f(x, p),
+                &data.x_ray,
+                &data.y_ray,
+                |x, p| function.f(x, p),
                 &parameters,
                 parameter_store.uncertainties.as_deref(),
                 &figure_name,
@@ -303,12 +326,12 @@ impl MyApp {
         }
     }
 
-    fn show_figure(&self, ui: &mut Ui) -> anyhow::Result<()> {
+    fn show_figure(&self, ui: &mut Ui, data: &Data) -> anyhow::Result<()> {
         let parameter_store = self.parameter_store_map.get(self.function);
-        let data: PlotPoints = izip!(&self.x_ray, &self.y_ray)
+        let data_series: PlotPoints = izip!(&data.x_ray, &data.y_ray)
             .map(|(x, y)| [*x, *y])
             .collect();
-        let data_points = Points::new("Data", data).radius(4.0f32).color(
+        let data_points = Points::new("Data", data_series).radius(4.0f32).color(
             Color32::from_hex("#1f77b4").map_err(|_| anyhow::anyhow!("#1f77b4 is invalid hex?"))?,
         );
 
@@ -316,7 +339,7 @@ impl MyApp {
             let params: Vec<f64> = parameter_store.values.iter().filter_map(|v| *v).collect();
 
             const N: usize = 1000;
-            let (min, max) = match self.x_ray.iter().minmax() {
+            let (min, max) = match data.x_ray.iter().minmax() {
                 MinMaxResult::MinMax(min, max) => (*min, *max),
                 _ => anyhow::bail!("x_ray must have more than one item!"),
             };
@@ -344,13 +367,55 @@ impl MyApp {
         });
         Ok(())
     }
+
+    fn set_file(&mut self, path: PathBuf) {
+        match Data::new(path) {
+            Ok(data) => {
+                self.data = Some(data);
+                self.parameter_store_map.reset();
+                self.message = Message::None;
+            }
+            Err(err) => self.message = Message::Error(format!("{err:#}")),
+        }
+    }
 }
 
 impl eframe::App for MyApp {
     fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {}
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top_panel").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open").clicked()
+                        && let Some(path) = rfd::FileDialog::new().pick_file()
+                    {
+                        self.set_file(path);
+                    }
+                    if ui.button("Quit").clicked() {
+                        ui.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            });
+        });
+
         egui::CentralPanel::default().show(ui, |ui| {
+            let Some(data) = &self.data else {
+                ui.heading("Open a file containing datapoints");
+
+                ui.add_space(5.0);
+
+                if ui.button("Open file…").clicked()
+                    && let Some(path) = rfd::FileDialog::new().pick_file()
+                {
+                    self.set_file(path);
+                }
+
+                ui.label(self.message.to_string());
+                return;
+            };
+            let parameter_store = self.parameter_store_map.get_mut(self.function);
+
             // Function combo box
             egui::ComboBox::from_label("Select a function")
                 .selected_text(format!("{:?}", self.function))
@@ -370,7 +435,6 @@ impl eframe::App for MyApp {
 
             // Parameter selection boxes
             ui.vertical(|ui| {
-                let parameter_store = self.parameter_store_map.get_mut(self.function);
                 for (i, parameter) in parameter_store.names.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{}: ", parameter));
@@ -397,24 +461,31 @@ impl eframe::App for MyApp {
             ui.add_space(5.0);
 
             // Run/Reset/Save buttons
+            let message = &mut self.message;
+            let function = self.function;
+            let run_thread = &mut self.run_thread;
             ui.horizontal(|ui| {
                 if ui.button("Run").clicked() {
-                    self.message = self.run();
+                    *message = Self::run(data, function, run_thread, parameter_store);
                 }
                 ui.add_space(5.0);
                 if ui.button("Reset").clicked() {
-                    self.parameter_store_map.get_mut(self.function).reset();
+                    parameter_store.reset();
                 }
                 ui.add_space(5.0);
                 if ui.button("Save Figure").clicked() {
-                    self.message = self.save_figure();
+                    *message = Self::save_figure(data, function, parameter_store);
                 }
             });
 
             ui.add_space(5.0);
 
             // Message
-            if let Some(message) = self.read_run_thread() {
+            if let Some(message) = Self::read_run_thread(
+                self.function,
+                &mut self.run_thread,
+                &mut self.parameter_store_map,
+            ) {
                 self.message = message;
             }
             ui.label(self.message.to_string());
@@ -427,7 +498,7 @@ impl eframe::App for MyApp {
             {
                 format!(
                     "{}",
-                    error(&self.x_ray, &self.y_ray, self.function, &parameters)
+                    error(&data.x_ray, &data.y_ray, self.function, &parameters)
                 )
             } else {
                 "NaN".into()
@@ -437,7 +508,7 @@ impl eframe::App for MyApp {
             ui.add_space(2.0);
 
             // Data figure
-            if let Err(err) = self.show_figure(ui) {
+            if let Err(err) = self.show_figure(ui, data) {
                 self.message = Message::Error(format!("Failed to show figure: {}", err));
             }
         });

@@ -46,12 +46,17 @@ itertools = "0.15.0"
 clap = { version = "4.6.7", features = ["derive"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
-egui_plot = "0.37.0"
-eframe = "0.36.2"
+egui_plot = "0.38.0"
+eframe = { version = "0.37.0", default-features = false, features = [
+    "accesskit", "wayland", "x11", "wgpu_no_default_features", "default_fonts", "system_fonts"]}
+wgpu = { version = "30.0.1", default-features = false, features = [
+    "std", "dx12", "gles", "metal", "vulkan", "wgsl", "parking_lot"
+]}
 log = "0.4.34"
 pretty_env_logger = "0.5.0"
 anyhow = "1.0.104"
-fs-err = "3.3.1"
+fs-err = "3.3.2"
+rfd = "0.17.2"
 
 [dev-dependencies]
 rand = "0.10.3"

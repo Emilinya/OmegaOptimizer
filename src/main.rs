@@ -10,7 +10,11 @@ use anyhow::Context;
 use clap::Parser;
 use log::LevelFilter;
 use nalgebra::SVector;
-use std::{env, path::PathBuf, time::Instant};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 use strum::VariantNames;
 
 use error_functions::ErrorFunction;
@@ -39,7 +43,7 @@ fn parse_initial_parameters(parameter_string: &str) -> Result<f64, String> {
 }
 
 fn optimizinate<const D: usize, F: Differentiated<D>>(
-    datafile: &PathBuf,
+    datafile: &Path,
     initial_parameters: SVector<f64, D>,
     plot_result: bool,
 ) -> anyhow::Result<OptimizinateResult> {
@@ -82,21 +86,23 @@ fn optimizinate<const D: usize, F: Differentiated<D>>(
 
 #[derive(Parser)]
 struct Args {
-    /// Path to the file containing data you want to fit a function to
-    datafile: PathBuf,
+    /// Path to a file containing data you want to fit a function to
+    #[arg(short, long)]
+    datafile: Option<PathBuf>,
     /// Name of the function you want to fit to your data.
     /// Use the -p flag to get a list of valid function names
-    #[arg(value_parser=Functions::descriptive_from_str)]
+    #[arg(short, long, value_parser=Functions::descriptive_from_str)]
     function: Option<Functions>,
     /// An optional space separated list of initial parameters. Number
     /// of initial parameters must match the number of parameters in the function
     /// you choose. Parameters in the list can also be 'None', in which case they
     /// are set to a default value.
-    #[arg(value_parser=parse_initial_parameters)]
+    #[arg(short, long, value_parser=parse_initial_parameters)]
     initial_parameters: Option<Vec<f64>>,
-    /// Run program without a gui.
-    #[arg(short, long)]
-    fast: bool,
+    /// Run program without a gui. This requires the datafile and function
+    /// to be set.
+    #[arg(long)]
+    headless: bool,
     /// Print a list of all valid function names
     #[arg(short, long)]
     print_function_names: bool,
@@ -109,17 +115,14 @@ fn main() -> anyhow::Result<()> {
             "Valid function names are {}.",
             utils::prettify_list(Functions::VARIANTS)
         );
+        return Ok(());
     }
 
     let mut builder = pretty_env_logger::formatted_timed_builder();
     if let Ok(s) = env::var("RUST_LOG") {
         builder.parse_filters(&s);
     } else {
-        builder.filter_level(if args.fast {
-            LevelFilter::Info
-        } else {
-            LevelFilter::Warn
-        });
+        builder.filter_level(LevelFilter::Info);
     }
     builder.init();
 
@@ -135,12 +138,14 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
-    if args.fast {
+    if args.headless {
         let Some(function) = args.function else {
             anyhow::bail!("You must specify a function when running program headless!");
         };
-        let result =
-            function.optimizinate(&args.datafile, args.initial_parameters.as_deref(), true)?;
+        let Some(datafile) = args.datafile else {
+            anyhow::bail!("You must specify a file when running program headless!");
+        };
+        let result = function.optimizinate(&datafile, args.initial_parameters.as_deref(), true)?;
 
         println!(
             "Got optimal parameters: {}, which gives an error of {}",
@@ -150,7 +155,7 @@ fn main() -> anyhow::Result<()> {
         Ok(())
     } else {
         create_gui(
-            &args.datafile,
+            args.datafile,
             args.function,
             args.initial_parameters.as_deref(),
         )

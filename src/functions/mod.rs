@@ -4,7 +4,7 @@ use nalgebra::{SMatrix, SVector};
 use strum::VariantNames;
 use strum_macros::{EnumIter, EnumString, VariantNames};
 
-use std::{path::PathBuf, str::FromStr};
+use std::{path::Path, str::FromStr};
 
 use crate::utils::prettify_list;
 use crate::{OptimizinateResult, optimizinate};
@@ -89,7 +89,7 @@ macro_rules! create_function_enum {
 
             pub fn optimizinate(
                 &self,
-                datafile: &PathBuf,
+                datafile: &Path,
                 initial_parameter_opt: Option<&[f64]>,
                 plot_result: bool,
             ) -> anyhow::Result<OptimizinateResult> {
