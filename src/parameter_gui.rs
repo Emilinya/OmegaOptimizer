@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 
+use crate::draw_gui::Draw;
 use crate::functions::Functions;
 use crate::plotting::plotter::plot_slice;
 use crate::utils::{format_with_uncertainty, load_txt};
@@ -139,12 +140,6 @@ impl ParameterStoreMap {
         Self { map }
     }
 
-    fn get(&self, function: Functions) -> &ParameterStore {
-        self.map
-            .get(&function)
-            .expect("map should contain parameters for all functions")
-    }
-
     fn get_mut(&mut self, function: Functions) -> &mut ParameterStore {
         self.map
             .get_mut(&function)
@@ -227,8 +222,14 @@ impl Data {
     }
 }
 
+enum AppState {
+    Empty,
+    Data(Data),
+    Draw(Draw),
+}
+
 struct MyApp {
-    data: Option<Data>,
+    state: AppState,
     message: Message,
     function: Functions,
     run_thread: Option<RunThread>,
@@ -244,9 +245,13 @@ impl MyApp {
         let function = function.unwrap_or(Functions::Line);
         let parameter_store_map = ParameterStoreMap::new(function, initial_parameters);
 
-        let data = datafile.map(Data::new).transpose()?;
+        let state = if let Some(data) = datafile.map(Data::new).transpose()? {
+            AppState::Data(data)
+        } else {
+            AppState::Empty
+        };
         Ok(Self {
-            data,
+            state,
             message: Message::None,
             function,
             run_thread: None,
@@ -269,9 +274,8 @@ impl MyApp {
     }
 
     fn read_run_thread(
-        function: Functions,
         run_thread: &mut Option<RunThread>,
-        parameter_store_map: &mut ParameterStoreMap,
+        parameter_store: &mut ParameterStore,
     ) -> Option<Message> {
         if let Some(thread) = run_thread {
             // read messages in a loop to ensure we use the latest message
@@ -290,9 +294,7 @@ impl MyApp {
             }
             let result = result?;
 
-            parameter_store_map
-                .get_mut(function)
-                .update_values(&result.parameters, &result.uncertainties);
+            parameter_store.update_values(&result.parameters, &result.uncertainties);
             Some(Message::Ok(format!(
                 "Got parameters {}",
                 format_with_uncertainty(&result.parameters, &result.uncertainties)
@@ -326,8 +328,12 @@ impl MyApp {
         }
     }
 
-    fn show_figure(&self, ui: &mut Ui, data: &Data) -> anyhow::Result<()> {
-        let parameter_store = self.parameter_store_map.get(self.function);
+    fn show_figure(
+        ui: &mut Ui,
+        data: &Data,
+        function: Functions,
+        parameter_store: &ParameterStore,
+    ) -> anyhow::Result<()> {
         let data_series: PlotPoints = izip!(&data.x_ray, &data.y_ray)
             .map(|(x, y)| [*x, *y])
             .collect();
@@ -346,7 +352,7 @@ impl MyApp {
             let function: PlotPoints = (0..N)
                 .map(|i| {
                     let x = (i as f64 / (N - 1) as f64) * (max - min) + min;
-                    [x, self.function.f(x, &params)]
+                    [x, function.f(x, &params)]
                 })
                 .collect();
             Some(
@@ -371,7 +377,7 @@ impl MyApp {
     fn set_file(&mut self, path: PathBuf) {
         match Data::new(path) {
             Ok(data) => {
-                self.data = Some(data);
+                self.state = AppState::Data(data);
                 self.parameter_store_map.reset();
                 self.message = Message::None;
             }
@@ -392,6 +398,9 @@ impl eframe::App for MyApp {
                     {
                         self.set_file(path);
                     }
+                    if ui.button("Create").clicked() {
+                        self.state = AppState::Draw(Draw::new());
+                    }
                     if ui.button("Quit").clicked() {
                         ui.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -400,21 +409,34 @@ impl eframe::App for MyApp {
         });
 
         egui::CentralPanel::default().show(ui, |ui| {
-            let Some(data) = &self.data else {
-                ui.heading("Open a file containing datapoints");
+            let data = match &mut self.state {
+                AppState::Empty => {
+                    ui.heading("Open a file containing datapoints or create a new one");
 
-                ui.add_space(5.0);
+                    ui.add_space(5.0);
 
-                if ui.button("Open file…").clicked()
-                    && let Some(path) = rfd::FileDialog::new().pick_file()
-                {
-                    self.set_file(path);
+                    if ui.button("Open file").clicked()
+                        && let Some(path) = rfd::FileDialog::new().pick_file()
+                    {
+                        self.set_file(path);
+                    }
+
+                    if ui.button("Create data").clicked() {
+                        self.state = AppState::Draw(Draw::new());
+                    }
+
+                    ui.label(self.message.to_string());
+                    return;
                 }
-
-                ui.label(self.message.to_string());
-                return;
+                AppState::Draw(draw) => {
+                    if let Some(datafile) = draw.ui(ui) {
+                        self.set_file(datafile);
+                    }
+                    ui.label(self.message.to_string());
+                    return;
+                }
+                AppState::Data(data) => &*data,
             };
-            let parameter_store = self.parameter_store_map.get_mut(self.function);
 
             // Function combo box
             egui::ComboBox::from_label("Select a function")
@@ -430,6 +452,7 @@ impl eframe::App for MyApp {
                         }
                     }
                 });
+            let parameter_store = self.parameter_store_map.get_mut(self.function);
 
             ui.add_space(5.0);
 
@@ -481,11 +504,7 @@ impl eframe::App for MyApp {
             ui.add_space(5.0);
 
             // Message
-            if let Some(message) = Self::read_run_thread(
-                self.function,
-                &mut self.run_thread,
-                &mut self.parameter_store_map,
-            ) {
+            if let Some(message) = Self::read_run_thread(&mut self.run_thread, parameter_store) {
                 self.message = message;
             }
             ui.label(self.message.to_string());
@@ -493,9 +512,7 @@ impl eframe::App for MyApp {
             ui.add_space(10.0);
 
             // Approximation error
-            let error = if let Some(parameters) =
-                self.parameter_store_map.get(self.function).get_parameters()
-            {
+            let error = if let Some(parameters) = parameter_store.get_parameters() {
                 format!(
                     "{}",
                     error(&data.x_ray, &data.y_ray, self.function, &parameters)
@@ -508,7 +525,7 @@ impl eframe::App for MyApp {
             ui.add_space(2.0);
 
             // Data figure
-            if let Err(err) = self.show_figure(ui, data) {
+            if let Err(err) = Self::show_figure(ui, data, function, parameter_store) {
                 self.message = Message::Error(format!("Failed to show figure: {}", err));
             }
         });

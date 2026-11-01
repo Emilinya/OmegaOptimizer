@@ -1,3 +1,4 @@
+mod draw_gui;
 mod error_functions;
 mod functions;
 mod minimizers;
@@ -125,6 +126,8 @@ fn main() -> anyhow::Result<()> {
         builder.filter_level(LevelFilter::Info);
     }
     builder.init();
+
+    unsafe { env::set_var("RUST_BACKTRACE", "1") };
 
     if let (Some(parameters), Some(function)) = (&args.initial_parameters, &args.function)
         && parameters.len() != function.parameter_count()
